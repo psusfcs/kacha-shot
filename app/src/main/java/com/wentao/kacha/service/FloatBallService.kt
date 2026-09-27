@@ -880,9 +880,6 @@ class FloatBallService : Service() {
                         //   最常见的原因是小米的「后台弹出界面」权限默认禁止：
                         //   从后台服务启动 Activity 会被**静默拦截**（不报错、也不跳转）。
                         showOverlayTip("没跳转成功（图已存相册）。多半是缺「后台弹出界面」权限")
-                    } else {
-                        // ★ v1.5：startActivity 没抛异常 ≠ 真的跳过去了 —— 见 verifyJumped
-                        verifyJumped(pkg)
                     }
                 }
             }
@@ -1146,39 +1143,6 @@ class FloatBallService : Service() {
             anim.duration = 340
             anim.start()
         }
-    }
-
-    /**
-     * 验证「分享跳转」是不是**真的**跳过去了。
-     *
-     * ★★ v1.5 新增。起因：用户实测「图存进相册了，但就是不跳转」，
-     *    而我们这边 `startActivity` **既不抛异常也不报错** —— 因为
-     *    小米的「后台弹出界面」权限是在**系统层静默拦截**的：
-     *    调用方以为发出去了，实际压根没起。
-     *    没有这一步，我们永远发现不了这种失败。
-     *
-     * 判据：稍等片刻看「当前前台 App」是不是目标 App ——
-     *      这个信息无障碍服务一直在记（[ShotAccessibilityService.lastForegroundPackage]）。
-     *   · 是   → 跳过去了 ✓ 什么都不用做
-     *   · 不是 → 十有八九被系统拦了 → 抖一下 + 浮层告诉用户去开权限
-     *
-     * ⚠️ 为什么要等 1.2 秒：目标 App 冷启动要时间，无障碍的前台事件也要时间传上来，
-     *    立刻查会误判成"没跳过去"。
-     * ⚠️ 用户本来就在目标 App 里（在自己家点球）→ 前台包名 == pkg → 不算失败 ✓
-     */
-    private fun verifyJumped(pkg: String) {
-        mainHandler.postDelayed({
-            runCatching {
-                val fg = ShotAccessibilityService.lastForegroundPackage
-                if (fg == pkg) return@runCatching
-                Log.w(TAG, "分享后前台仍是「$fg」（期望 $pkg）→ 跳转可能被系统拦了")
-                // ★ v1.6：记一笔，首页的「跳转不了？点这里开权限」据此才亮出来
-                //   （平时不显示 —— 跳转正常的人要它干嘛，用户原话「有什么用」）
-                prefs.jumpBlocked = true
-                flashBallFail()
-                showOverlayTip("没跳转成功（图已存相册）。多半是缺「后台弹出界面」权限")
-            }
-        }, 1200)
     }
 
     private fun hint(msg: String) {

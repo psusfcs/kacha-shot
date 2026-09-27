@@ -74,8 +74,13 @@ object ScrollCapture {
     /** 拼完之后最多保留多少行（防止超长图爆内存：12000 行 ≈ 4K 屏 4 屏高） */
     private const val MAX_RESULT_ROWS = 12000
 
-    /** 滑完一屏后等界面稳定再截图（太快会拍到滚动中的糊帧） */
-    private const val SETTLE_MS = 520L
+    /**
+     * 滑完一屏后等界面稳定再截图。
+     * ★ v1.7 520 -> 680：快速滑动常被页面当成 fling，松手后还有**惯性滚动**——
+     *   惯性不停就拍，拍到的是「还在动」的中间态，拼接对不齐（接缝的来源之一）。
+     *   业界建议滚动后等 1~2 秒再截（本值 + MIN_FRAME_GAP 合计约 1.3 秒）。
+     */
+    private const val SETTLE_MS = 680L
 
     /** 系统限制无障碍截图频率约 1 张/秒，两帧之间至少隔这么久 */
     private const val MIN_FRAME_GAP_MS = 620L
@@ -88,7 +93,7 @@ object ScrollCapture {
      * 300ms 在部分 ROM 上会被判成「快速 fling」，滑过头直接跳过内容；
      * 450ms 更接近人手匀速滑，滚动距离可控、不会跳过。
      */
-    private const val SCROLL_GESTURE_MS = 450L
+    private const val SCROLL_GESTURE_MS = 600L
 
     /**
      * 滚动截屏的进度回调（都跑在主线程）。
@@ -542,8 +547,13 @@ object ScrollCapture {
         val rows = minOf(MATCH_ROWS, curH / 3)
         if (rows < 4 || prevH < rows + 8) return 0
 
-        // 自适应步长：页面越高，扫描步长越大，保证耗时可控
-        val step = (prevH / 260).coerceAtLeast(1)
+        // ★★ v1.7：逐行扫描（step=1）—— 这是「两屏接头处错位」的核心修复。
+        //   原来自适应步长 ≈ 9 行，bestRow 有 ±9 行的误差 → 拼接处就会
+        //   **重复或丢一截内容**（用户实测：两屏中间出现明显的「接头」；
+        //   业界同理：偏 4 个像素就会 duplicate or drop 一条内容）。
+        //   开销实测可控：2400 行 × 每位置 384 次采样 ≈ 92 万次简单运算，
+        //   几十毫秒，而每帧之间本来就要等 1 秒以上。
+        val step = 1
 
         // ★ 指纹位置：cur 的中段（避开顶部吸顶栏，也不碰最底下）
         val probeRow = (curH * PROBE_RATIO).toInt().coerceIn(1, curH - rows - 1)
