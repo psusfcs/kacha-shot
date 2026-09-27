@@ -473,8 +473,15 @@ class MainActivity : AppCompatActivity() {
     private fun isMiui(): Boolean = runCatching {
         val cls = Class.forName("android.os.SystemProperties")
         val get = cls.getMethod("get", String::class.java)
-        val v = get.invoke(null, "ro.miui.ui.version.name") as? String
-        !v.isNullOrBlank()
+        // ⚠️⚠️ 千万别写成「上一行 as? String + 下一行以 ! 开头」——
+        //    Kotlin 会把行首那个 `!` 粘到上一行末尾当成**非空断言**，
+        //    于是解析成 `val v = (... as? String)!` 然后 `v.xxx` 就找不到 v 了。
+        //    报错长这样：Return type mismatch: expected Boolean, actual Any
+        //              + Unresolved reference 'v' + Syntax error。
+        //    （陷阱 22「编辑把换行吃掉」的变种：不是换行没了，是 `!` 跨行粘过去了。）
+        //    正确做法：用 `.orEmpty()` 收尾，**行首不要出现 `!`**。
+        val v = (get.invoke(null, "ro.miui.ui.version.name") as? String).orEmpty()
+        v.isNotBlank()
     }.getOrDefault(false)
 
     /**
