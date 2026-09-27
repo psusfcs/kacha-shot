@@ -1,0 +1,19 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.apk
+*.keystore
+
+# 签名密钥绝不进仓库（CI 从 Secret 解出来生成）
+keystore.p12
+keystore.jks
+*.p12
+*.jks

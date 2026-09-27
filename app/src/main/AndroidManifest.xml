@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  「咔嚓截屏」清单文件
+
+  ── 这个 App 一共只干三件事 ──
+    ① 悬浮球（点 = 截当前屏 / 长按 = 自动滚动截长图）
+    ② 截图（无障碍 takeScreenshot，一次授权永久免弹框）
+    ③ 把图交出去（分享跳转目标 App + 存相册 + 放剪贴板，三连同时走）
+
+  ── 权限为什么这么少 ──
+    · SYSTEM_ALERT_WINDOW    —— 悬浮球必须的（画在别的 App 上面）
+    · FOREGROUND_SERVICE     —— 球要常驻，不加会被系统随手杀
+    · FOREGROUND_SERVICE_SPECIAL_USE —— Android 14+ 前台服务必须声明具体类型
+    · POST_NOTIFICATIONS     —— Android 13+ 常驻通知要用户点同意
+    ★ 刻意**不要**的：
+      · READ/WRITE_EXTERNAL_STORAGE —— 走 MediaStore 存相册，Android 10+ 免权限
+      · QUERY_ALL_PACKAGES          —— 用 queryIntentActivities 按「能收图」筛选即可，
+                                       全量列包名属于过度申请，上架/审核都会被质疑
+      · INTERNET                    —— 这个 App 不联网，一个字都不传出去
+  ============================================================================
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 悬浮球 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- 常驻前台服务 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Android 13+ 通知权限 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 开机自启（用户可选；部分 ROM 需要用户在系统里单独放行） -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!--
+      ★ 快捷方式自愈（HyperOS 常用）：升级后图标可能变灰/消失，声明这条让系统重建。
+      ★ 这条同时也是「能查到其他 App」的前提之一，但只用于分享目标选择时的
+        queryIntentActivities 结果，不做全量包名枚举。
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="image/*" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".KachaApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Kacha"
+        tools:targetApi="34">
+
+        <!-- ==================== 首页 = 设置页 ==================== -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          ==================== 敲门页（一闪而过的透明页）====================
+          ★ 用途：无障碍服务被 ROM 回收后，系统里明明还勾选着、但实例已经没了。
+            开一个一闪而过的 Activity = 制造一波真实的窗口切换事件，
+            系统被惊动后会重新检查「勾选的无障碍服务都绑上了吗」→ 补绑。
+          ★ 为什么能后台启动它：本 App 持有 SYSTEM_ALERT_WINDOW，
+            在 Android 10+ 的后台启动 Activity 豁免名单里。
+          ★ 用户完全看不见（theme 全透明、无动画、即刻 finish）。
+        -->
+        <activity
+            android:name=".ui.NudgeActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Kacha.Nudge" />
+
+        <!-- ==================== 悬浮球服务 ==================== -->
+        <service
+            android:name=".service.FloatBallService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="悬浮球常驻，用于随时一键截屏" />
+        </service>
+
+        <!-- ==================== 截图无障碍服务 ==================== -->
+        <service
+            android:name=".service.ShotAccessibilityService"
+            android:exported="true"
+            android:label="@string/acc_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!--
+          ==================== FileProvider ====================
+          ★ 分享 / 剪贴板给别的 App 传图必须走 content:// uri。
+            直接给 file:// 从 Android 7 起会抛 FileUriExposedException 崩掉。
+          ★ authority 必须和 Exporter.kt 里拼的 "${'$'}{packageName}.fileprovider" 一致。
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- 开机自启（用户开了「开机自动启动悬浮球」才生效） -->
+        <receiver
+            android:name=".service.BootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ★ 主按钮底：实心橘 + 圆角。用于主要动作（启动悬浮球 / 设为默认）。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/accent" />
+    <corners android:radius="12dp" />
+</shape>

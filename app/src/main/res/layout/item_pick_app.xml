@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ★ 选择列表里的一行：图标 + 名字，整行可点 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingLeft="8dp"
+    android:paddingTop="11dp"
+    android:paddingRight="8dp"
+    android:paddingBottom="11dp">
+
+    <ImageView
+        android:id="@+id/ivPickIcon"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:contentDescription="@string/target_pick_title"
+        android:scaleType="fitCenter" />
+
+    <TextView
+        android:id="@+id/tvPickName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="13dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/text_primary"
+        android:textSize="16sp" />
+
+    <ImageView
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:alpha="0.5"
+        android:contentDescription="@string/target_pick_title"
+        android:src="@drawable/ic_check" />
+</LinearLayout>

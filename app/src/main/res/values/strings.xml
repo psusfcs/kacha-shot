@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ==================== 基础 ==================== -->
+    <string name="app_name">咔嚓截屏</string>
+
+    <!-- ==================== 首页 ==================== -->
+    <string name="home_title">咔嚓截屏</string>
+    <string name="home_subtitle">点球截当前屏 · 长按球截长图 · 自动送往你选的 App</string>
+
+    <string name="section_status">当前状态</string>
+    <string name="section_target">截完发给谁</string>
+    <string name="section_switch">导出动作</string>
+    <string name="section_help">怎么用</string>
+
+    <!-- 状态行 -->
+    <string name="status_overlay">悬浮窗权限</string>
+    <string name="status_overlay_on">已开</string>
+    <string name="status_overlay_off">没开</string>
+    <string name="status_acc">截屏权限（无障碍）</string>
+    <string name="status_acc_on">已开</string>
+    <string name="status_acc_off">没开</string>
+    <string name="status_ball">悬浮球</string>
+    <string name="status_ball_on">运行中</string>
+    <string name="status_ball_off">没启动</string>
+
+    <string name="btn_open_overlay">去开悬浮窗</string>
+    <string name="btn_open_acc">去开截屏权限</string>
+    <string name="btn_ball_toggle_on">启动悬浮球</string>
+    <string name="btn_ball_toggle_off">关闭悬浮球</string>
+
+    <!-- 目标 App -->
+    <string name="target_empty">还没添加。点下面「添加应用」，从手机里装上、并且能收图的应用里挑一个。</string>
+    <string name="target_default_tag">默认</string>
+    <string name="target_add">＋ 添加应用</string>
+    <string name="target_set_default">设为默认</string>
+    <string name="target_default_label">默认发给</string>
+    <string name="target_none_chosen">未选择</string>
+    <string name="target_pick_title">选择要发送到的应用</string>
+    <string name="target_pick_sub">这里只列出手机里**能接收图片**的应用。</string>
+    <string name="target_remove">移除</string>
+    <string name="dialog_cancel">取消</string>
+
+    <!-- 导出动作 -->
+    <string name="sw_gallery">同时存进相册</string>
+    <string name="sw_gallery_sub">兜底用。图片存在相册的「咔嚓截屏」文件夹里，随手可删。</string>
+    <string name="sw_clipboard">同时放进剪贴板</string>
+    <string name="sw_clipboard_sub">备用。有些 App 不支持粘贴图片，粘不出来就把这个关掉。</string>
+    <string name="sw_auto_send">截完自动送过去</string>
+    <string name="sw_auto_send_sub">关掉的话，截图只进相册和剪贴板，不自动跳转。</string>
+
+    <string name="sw_boot">开机自动启动悬浮球</string>
+    <string name="sw_boot_sub">重启手机后不用再手动打开。</string>
+
+    <!-- 用法 -->
+    <string name="help_line1">点一下悬浮球 → 截当前这一屏 → 自动送到「默认」那个 App</string>
+    <string name="help_line2">长按悬浮球 → 自动一屏屏往下滚，拼成一张长图再送过去</string>
+    <string name="help_line3">拖动悬浮球可以挪位置；松手会自动贴到屏幕边上</string>
+    <string name="help_line4">手机闲置一会儿，球会缩成一个贴边小点；碰一下就回来</string>
+
+    <string name="help_note_title">几个要提前知道的事</string>
+    <string name="help_note1">· 送过去是**新开一个对话**，接不上你正在聊的那条（安卓分享机制的限制，谁也做不到）</string>
+    <string name="help_note2">· 银行、支付这类受保护的页面截不了，这是系统的安全限制</string>
+    <string name="help_note3">· 页面有吸顶栏或懒得加载时，长图可能接缝不齐 —— 那就多截几次短图</string>
+    <string name="help_note4">· 国内手机管家可能把球清掉，隔段时间用不了就回来点一下「启动悬浮球」</string>
+
+    <!-- 开关球大小 / 透明度 -->
+    <string name="label_ball_size">悬浮球大小</string>
+    <string name="label_ball_alpha">悬浮球透明度</string>
+
+    <!-- ==================== 通知 ==================== -->
+    <string name="notif_channel_name">常驻运行</string>
+    <string name="notif_channel_desc">保持悬浮球在后台可用</string>
+    <string name="notif_title">咔嚓截屏正在待命</string>
+    <string name="notif_text">点一下回到设置页</string>
+    <string name="acc_notif_channel">截屏权限提醒</string>
+    <string name="acc_notif_channel_desc">截屏权限掉了的时候提醒你</string>
+    <string name="acc_notif_title">截屏权限掉了</string>
+    <string name="acc_lost_perm">截屏权限被系统关掉了。点这里去重新打开，开一次就行。</string>
+    <string name="acc_lost_sleep">截屏服务睡着了，正在自己叫醒。要是还不行，点这里去重开一次。</string>
+
+    <!-- ==================== 无障碍服务的对外说明（系统设置页里显示）==================== -->
+    <string name="acc_label">咔嚓截屏 · 截图服务</string>
+    <string name="acc_summary">点悬浮球就能截屏</string>
+    <string name="acc_desc">「咔嚓截屏」靠这个服务帮你截图。\n\n它只做两件事：\n· 截取屏幕画面\n· 长截图时模拟手指往下滑\n\n它不会读取屏幕上的文字，不会记录你输入的任何内容，也不会联网。截图只存在你手机里，只会送到你自己选的那个应用。</string>
+
+    <!-- ==================== 提示 ==================== -->
+    <string name="tip_scrolling">正在滚动截屏，别碰屏幕…</string>
+    <string name="tip_scroll_frame">已抓 %1$d 屏…</string>
+    <string name="scroll_guard_sub">会自动往下滚，到底了自己停</string>
+    <string name="scroll_guard_stop">停下</string>
+    <string name="tip_no_target">还没选发送目标，先去设置里加一个</string>
+    <string name="tip_no_overlay">要先给「咔嚓截屏」开悬浮窗权限</string>
+    <string name="tip_no_acc">截屏权限没开，点这里去开</string>
+    <string name="tip_share_fail">没送出去（目标应用可能被卸载了），图已存相册</string>
+    <string name="tip_saved_gallery">已存相册</string>
+    <string name="tip_no_acc_short">截屏权限没开</string>
+
+    <!-- 无障碍服务提示（无界面，仅系统用） -->
+    <string name="acc_service_name">咔嚓截屏 · 截图服务</string>
+
+    <!-- ==================== 悬浮球内容描述 ==================== -->
+    <string name="cd_ball">截图球：点一下截当前屏，长按截长图</string>
+    <string name="cd_ball_mini">截图球（已收起）：碰一下展开</string>
+
+    <!-- 打包信息 -->
+    <string name="about_version">版本 %1$s（%2$d）</string>
+</resources>

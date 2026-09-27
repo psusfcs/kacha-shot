@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      ============================================================================
+      主题
+
+      ⚠️⚠️ 陷阱 14（本项目踩过、AAPT 报 failed linking references）：
+         **自定义 style 不要写 parent="Widget.XXX"** ——
+         LinearLayout / FrameLayout 这类容器**根本没有** Widget.* 样式，
+         前五道本地校验全绿也拦不住，只有云编译才炸。
+         容器要继承只能省略 parent，或者用确定存在的 Widget.TextView / Button / ImageView。
+
+      ⚠️ 陷阱 ①（同样踩过）：style 名字里的点要用 `.` 表示继承层级？
+         不是 —— 我们这里**全部用扁平命名**（KachaXxx），不靠点做隐式继承，
+         避免 AAPT 把 `Kacha.Btn` 当成 `Kacha` 的子样式去解析。
+      ============================================================================
+    -->
+
+    <style name="Theme.Kacha" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorPrimaryDark">@color/accent_pressed</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+    </style>
+
+    <!-- 敲门页：全透明 + 无动画 + 透明遮罩，用户完全看不见 -->
+    <style name="Theme.Kacha.Nudge" parent="Theme.Kacha">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
+
+    <!-- ==================== 文字 ==================== -->
+    <style name="KachaText" parent="Widget.AppCompat.TextView">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KachaSectionTitle" parent="Widget.AppCompat.TextView">
+        <item name="android:textColor">@color/text_tertiary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:letterSpacing">0.06</item>
+        <item name="android:paddingLeft">4dp</item>
+        <item name="android:paddingRight">4dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KachaTitle" parent="Widget.AppCompat.TextView">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KachaSubTitle" parent="Widget.AppCompat.TextView">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:lineSpacingMultiplier">1.35</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KachaRowTitle" parent="Widget.AppCompat.TextView">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KachaRowSub" parent="Widget.AppCompat.TextView">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:lineSpacingMultiplier">1.3</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <!-- ==================== 卡片 ==================== -->
+    <style name="KachaCard">
+        <item name="android:background">@drawable/bg_card</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:padding">16dp</item>
+    </style>
+
+    <!-- ==================== 按钮（手绘底，不用系统 StateList）==================== -->
+    <style name="KachaButton" parent="Widget.AppCompat.TextView">
+        <item name="android:background">@drawable/bg_btn_ghost</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:minHeight">42dp</item>
+        <item name="android:paddingLeft">18dp</item>
+        <item name="android:paddingRight">18dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KachaButtonPrimary" parent="Widget.AppCompat.TextView">
+        <item name="android:background">@drawable/bg_btn_primary</item>
+        <item name="android:textColor">@color/text_on_accent</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:minHeight">42dp</item>
+        <item name="android:paddingLeft">18dp</item>
+        <item name="android:paddingRight">18dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KachaChip" parent="Widget.AppCompat.TextView">
+        <item name="android:background">@drawable/bg_chip</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:minHeight">28dp</item>
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingRight">12dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KachaChipOn" parent="KachaChip">
+        <item name="android:background">@drawable/bg_chip_on</item>
+        <item name="android:textColor">@color/accent</item>
+    </style>
+
+    <style name="KachaSwitch">
+        <item name="android:minWidth">48dp</item>
+        <item name="android:minHeight">30dp</item>
+    </style>
+
+</resources>

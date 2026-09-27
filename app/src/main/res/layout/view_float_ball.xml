@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  ★ 悬浮球本体（手绘）
+
+  结构：一层 ImageView 圆形底（bg_ball） + 一层图标（ic_ball_icon）叠在一起。
+  ★ 为什么不只用一层 ImageView + background：
+     隐身态（缩成小点）要**只剩圆球、不要图标**，分两层才好单独控制。
+     真实现是同一个 ImageView 切 background/src —— 见 FloatBallService。
+
+  ⚠️ 尺寸（layout_width/height）在这里只是「初始值」，
+     实际大小由 FloatBallService 按用户设置覆盖（dp(ballSize)）。
+  ============================================================================
+-->
+<ImageView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ivBall"
+    android:layout_width="54dp"
+    android:layout_height="54dp"
+    android:background="@drawable/bg_ball"
+    android:contentDescription="@string/cd_ball"
+    android:padding="13dp"
+    android:scaleType="fitCenter"
+    android:src="@drawable/ic_ball_icon" />

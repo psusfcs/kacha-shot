@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ★ 深色模式整套覆盖。资源名必须跟 values/colors.xml 一一对应，漏一个就会串色。 -->
+<resources>
+    <color name="bg">#FF141312</color>
+    <color name="surface">#FF1F1E1C</color>
+    <color name="surface_alt">#FF2A2825</color>
+    <color name="divider">#1AFFFFFF</color>
+
+    <color name="text_primary">#FFF2EFEB</color>
+    <color name="text_secondary">#FFA8A29B</color>
+    <color name="text_tertiary">#FF75706A</color>
+    <color name="text_on_accent">#FFFFFFFF</color>
+
+    <color name="accent">#FFFF8A54</color>
+    <color name="accent_soft">#2EFF8A54</color>
+    <color name="accent_pressed">#FFE0763F</color>
+
+    <color name="ok">#FF4CBE85</color>
+    <color name="warn">#FFE0AE3E</color>
+    <color name="danger">#FFE96058</color>
+
+    <color name="ball_fill">#F22A2825</color>
+    <color name="ball_ring">#33FFFFFF</color>
+    <color name="ball_icon">#FFFF8A54</color>
+
+    <color name="guard_bar">#E6141312</color>
+
+    <color name="transparent">#00000000</color>
+</resources>

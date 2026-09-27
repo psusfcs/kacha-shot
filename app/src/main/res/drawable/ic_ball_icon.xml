@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  ★ 手绘图标：快门
+    24×24 viewport，纯 path 画，**不用任何系统图标资源**。
+
+    造型：一个相机机身 + 中间一圈快门圈 + 顶部一个小凸起（闪光灯/取景器）
+    strokeColor 用 ?attr 不行（Vector 里不支持主题属性），所以直接引用 color，
+    深浅模式各有一份颜色值（values / values-night 的 ball_icon）。
+
+    ⚠️ 陷阱 ⑱（本项目踩过）：图标颜色**纯白 + 底色也是白/透明 = 隐形**。
+       这里 fillColor 是 transparent，只要 strokeColor 别写成白色就不会消失。
+  ============================================================================
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 相机机身圆角矩形 -->
+    <path
+        android:pathData="M4.2,7.6 h15.6 a2.2,2.2 0 0 1 2.2,2.2 v8.0 a2.2,2.2 0 0 1 -2.2,2.2 h-15.6 a2.2,2.2 0 0 1 -2.2,-2.2 v-8.0 a2.2,2.2 0 0 1 2.2,-2.2 z"
+        android:fillColor="#00000000"
+        android:strokeColor="@color/ball_icon"
+        android:strokeWidth="1.7" />
+
+    <!-- 顶部取景器凸起 -->
+    <path
+        android:pathData="M8.6,7.6 l1.1,-2.1 a1,1 0 0 1 0.9,-0.55 h2.8 a1,1 0 0 1 0.9,0.55 l1.1,2.1"
+        android:fillColor="#00000000"
+        android:strokeColor="@color/ball_icon"
+        android:strokeWidth="1.7"
+        android:strokeLineJoin="round" />
+
+    <!-- 中间快门圈 -->
+    <path
+        android:pathData="M12,10.7 m-3.15,0 a3.15,3.15 0 1,0 6.3,0 a3.15,3.15 0 1,0 -6.3,0"
+        android:fillColor="#00000000"
+        android:strokeColor="@color/ball_icon"
+        android:strokeWidth="1.7" />
+
+    <!-- 快门圈里的小亮点（闪光） -->
+    <path
+        android:pathData="M12,10.7 m-0.95,0 a0.95,0.95 0 1,0 1.9,0 a0.95,0.95 0 1,0 -1.9,0"
+        android:fillColor="@color/ball_icon" />
+</vector>

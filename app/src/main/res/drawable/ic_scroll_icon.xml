@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ★ 手绘图标：滚动截长图
+    造型：一台手机（圆角矩形）+ 一条向下的箭头 + 底部滚动条
+    用来说明「长按 = 自动往下滚、拼成长图」。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 手机外框 -->
+    <path
+        android:pathData="M6.4,2.6 h11.2 a2,2 0 0 1 2,2 v14.8 a2,2 0 0 1 -2,2 h-11.2 a2,2 0 0 1 -2,-2 v-14.8 a2,2 0 0 1 2,-2 z"
+        android:fillColor="#00000000"
+        android:strokeColor="@color/ball_icon"
+        android:strokeWidth="1.7" />
+
+    <!-- 顶部听筒 -->
+    <path
+        android:pathData="M10.6,4.9 h2.8"
+        android:fillColor="#00000000"
+        android:strokeColor="@color/ball_icon"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+
+    <!-- 向下箭头杆 -->
+    <path
+        android:pathData="M12,7.9 v6.4"
+        android:fillColor="#00000000"
+        android:strokeColor="@color/ball_icon"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round" />
+
+    <!-- 向下箭头头 -->
+    <path
+        android:pathData="M9.5,11.9 l2.5,2.5 l2.5,-2.5"
+        android:fillColor="#00000000"
+        android:strokeColor="@color/ball_icon"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 底部短横（示意已拼出长图） -->
+    <path
+        android:pathData="M9.2,17.8 h5.6"
+        android:fillColor="#00000000"
+        android:strokeColor="@color/ball_icon"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+</vector>

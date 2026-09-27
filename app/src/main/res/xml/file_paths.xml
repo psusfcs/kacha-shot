@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  FileProvider 能对外发的目录白名单
+
+  ⚠️ 只开这一个子目录（cacheDir/shares/），**绝不要开整个缓存区** ——
+     那等于把 App 所有临时文件都暴露给任何接图的 App。
+
+  ★ 少开这一条会怎样：
+     Exporter.saveTempForShare() 里的 FileProvider.getUriForFile 会直接抛
+     IllegalArgumentException: Failed to find configured root
+     → 表现就是「一点分享就崩」。
+
+  path="shares/" 对应 Exporter.kt 里的 SHARE_DIR = "shares"（cacheDir/shares）。
+  ============================================================================
+-->
+<paths>
+    <cache-path
+        name="kacha_shares"
+        path="shares/" />
+</paths>

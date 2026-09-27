@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ★ 通知栏小图标：必须是**纯白单色**（系统会自己按主题染色）。
+     ⚠️ 陷阱 ⑰ 的变体：通知小图标如果带彩色，会在部分 ROM 上显示成白方块。
+     所以这里只保留一个纯白剪影，没有任何多余颜色。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+
+    <!-- 相机剪影（实心） -->
+    <path
+        android:pathData="M9.2,4.6 l1.1,-2.1 a1,1 0 0 1 0.9,-0.55 h2.8 a1,1 0 0 1 0.9,0.55 l1.1,2.1 h1.8 a2.2,2.2 0 0 1 2.2,2.2 v8.0 a2.2,2.2 0 0 1 -2.2,2.2 h-15.6 a2.2,2.2 0 0 1 -2.2,-2.2 v-8.0 a2.2,2.2 0 0 1 2.2,-2.2 z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- 中心圆挖空（用浅色无法挖，所以画个深色底再叠亮色点，这里简化为亮色点） -->
+    <path
+        android:pathData="M12,10.6 m-3.0,0 a3.0,3.0 0 1,0 6.0,0 a3.0,3.0 0 1,0 -6.0,0"
+        android:fillColor="#CCFFFFFF" />
+</vector>

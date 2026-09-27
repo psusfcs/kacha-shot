@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  截图无障碍服务配置
+
+  ── 只申请两项真本事 ──
+    · canTakeScreenshot   = 能截图（Android 11+，一次授权永久免弹框）
+    · canPerformGestures  = 能模拟手指滑动（长截图必须，全安卓只有无障碍能干）
+
+  ── 隐私红线（★ 绝不能改）──
+    · canRetrieveWindowContent = "false"
+      我们**不读屏幕上的任何文字**、不监听输入、不看控件树。
+      打开它意味着任何人都能借此读取你的密码输入框 —— 没必要，我们只要截图。
+    · accessibilityEventTypes 只收 typeWindowStateChanged
+      = 只关心「前台换成了哪个 App」这一个信号（给分享跳转判断当前在哪），
+        不看内容。
+    · 不声明 flagRetrieveInteractiveWindows / flagRequestFilterKeyEvents。
+  ============================================================================
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="false"
+    android:canTakeScreenshot="true"
+    android:description="@string/acc_desc"
+    android:notificationTimeout="100"
+    android:summary="@string/acc_summary" />

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  ★ 应用图标（手绘，非系统图标）
+
+  造型：橘色圆角方底 + 白色相机轮廓 + 中间快门圈 + 一圈「咔嚓」的闪光
+  视觉思路：一眼看出是「截屏/拍照」工具，同时橘色在桌面上够跳。
+
+  ⚠️ adaptive icon 分两层：
+     · background 层 = 纯色/渐变底（会被系统裁成各种形状）
+     · foreground 层 = 图形（必须留出安全边距，系统会裁掉外侧约 1/3）
+     所以前景图形一律画在中间 66×66 的区域内（viewport 108）。
+  ============================================================================
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 相机机身 -->
+    <path
+        android:pathData="M36,42 h36 a7,7 0 0 1 7,7 v25 a7,7 0 0 1 -7,7 h-36 a7,7 0 0 1 -7,-7 v-25 a7,7 0 0 1 7,-7 z"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.2" />
+
+    <!-- 顶部取景器凸起 -->
+    <path
+        android:pathData="M46,42 l3.4,-6.6 a3.2,3.2 0 0 1 2.9,-1.8 h3.4 a3.2,3.2 0 0 1 2.9,1.8 l3.4,6.6"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.2"
+        android:strokeLineJoin="round" />
+
+    <!-- 快门圈 -->
+    <path
+        android:pathData="M54,53 m-9.6,0 a9.6,9.6 0 1,0 19.2,0 a9.6,9.6 0 1,0 -19.2,0"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.2" />
+
+    <!-- 快门圈里的闪光点 -->
+    <path
+        android:pathData="M54,53 m-3.1,0 a3.1,3.1 0 1,0 6.2,0 a3.1,3.1 0 1,0 -6.2,0"
+        android:fillColor="#FFFFFF" />
+
+    <!-- 右上角的「咔嚓」小星芒（两点，画得克制，不抢主体） -->
+    <path
+        android:pathData="M78,34 l2.0,5.4 l5.4,2.0 l-5.4,2.0 l-2.0,5.4 l-2.0,-5.4 l-5.4,-2.0 l5.4,-2.0 z"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.92" />
+</vector>
