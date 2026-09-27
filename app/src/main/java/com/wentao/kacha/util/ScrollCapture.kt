@@ -76,11 +76,16 @@ object ScrollCapture {
 
     /**
      * 滑完一屏后等界面稳定再截图。
-     * ★ v1.7 520 -> 680：快速滑动常被页面当成 fling，松手后还有**惯性滚动**——
-     *   惯性不停就拍，拍到的是「还在动」的中间态，拼接对不齐（接缝的来源之一）。
-     *   业界建议滚动后等 1~2 秒再截（本值 + MIN_FRAME_GAP 合计约 1.3 秒）。
+     *
+     * ★★ v1.8 680 -> 1150：这是「明明在滚、却说画面没变化」的主因（用户实测证实）：
+     *   我们的匀速慢滑结束瞬间**手指还有速度**，RecyclerView / ScrollView 会把它
+     *   当成 fling 继续惯性滚动（几百毫秒到一秒多）。
+     *   惯性没停就拍：两帧间的实际位移 = 手势 + 惯性，很容易**超过指纹的回看范围**
+     *   （指纹在 25% 高度处，往回最多只能看到 75% 的位移）→ 匹配不到 → 误判「没滚」→
+     *   帧全被丢 → 用户看到「滑了 N 次、画面都没变化」，可页面明明在滚。
+     *   惯性彻底停稳后再拍，位移回到纯手势的可预期范围，判定和拼接就都对了。
      */
-    private const val SETTLE_MS = 680L
+    private const val SETTLE_MS = 1150L
 
     /** 系统限制无障碍截图频率约 1 张/秒，两帧之间至少隔这么久 */
     private const val MIN_FRAME_GAP_MS = 620L
@@ -654,6 +659,38 @@ object ScrollCapture {
     }
 
     /**
+     * 只比较画面 [fromRatio, toRatio] 高度范围内的平均色差。
+     * ★ 为什么只看中段：顶部有吸顶栏、底部有 overscroll 拉伸，
+     *   都会污染「整帧色差」；中段 30%~70% 是纯滚动内容，最诚实。
+     */
+    private fun regionDiff(
+        a: IntArray, b: IntArray, w: Int, h: Int,
+        fromRatio: Float, toRatio: Float
+    ): Double {
+        val y0 = (h * fromRatio).toInt()
+        val y1 = (h * toRatio).toInt()
+        if (y1 <= y0) return 0.0
+        val colStep = (w / 24).coerceAtLeast(1)
+        var sum = 0.0
+        var n = 0
+        var y = y0
+        while (y < y1) {
+            var x = 0
+            while (x < w) {
+                val pa = a[y * w + x]
+                val pb = b[y * w + x]
+                sum += (kotlin.math.abs(((pa shr 16) and 0xFF) - ((pb shr 16) and 0xFF)) +
+                        kotlin.math.abs(((pa shr 8) and 0xFF) - ((pb shr 8) and 0xFF)) +
+                        kotlin.math.abs((pa and 0xFF) - (pb and 0xFF))) / 3.0
+                n++
+                x += colStep
+            }
+            y += 2   // 隔行采样：判定用不着逐行，快一倍
+        }
+        return if (n == 0) 0.0 else sum / n
+    }
+
+    /**
      * 这一帧相对上一帧，**内容有没有真的往上走**？
      *
      * 判据就一条：能不能在「上一帧」里找到「这一帧的顶部」。
@@ -679,7 +716,16 @@ object ScrollCapture {
             val curPx = IntArray(w * cur.height)
             prev.getPixels(prevPx, 0, w, 0, 0, w, prev.height)
             cur.getPixels(curPx, 0, w, 0, 0, w, cur.height)
-            findOverlap(prevPx, prev.height, curPx, cur.height, w) > 0
+            if (findOverlap(prevPx, prev.height, curPx, cur.height, w) > 0) {
+                true
+            } else {
+                // ★★ v1.8 保险：匹配不到 ≠ 没滚 —— **位移超出指纹回看范围**时也匹配不到
+                //   （手势 + fling 惯性的总位移 > 75% 屏高时，新帧中段的内容在旧帧里根本不存在）。
+                //   第二判据：只比「中段 30%~70%」的色差 ——
+                //   真滚了中段一定大变；overscroll 拉伸主要发生在边缘，中段色差很小不会误判。
+                //   阈值 15 比整帧判定的 6 高，双重防误判。
+                regionDiff(prevPx, curPx, w, prev.height, 0.30f, 0.70f) > 15.0
+            }
         }.getOrDefault(true)
     }
 
