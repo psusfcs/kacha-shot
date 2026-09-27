@@ -69,6 +69,23 @@
         <item name="android:windowMinWidthMinor">100%</item>
     </style>
 
+    <!--
+      ★ 长图裁剪页主题（v1.2）
+
+      ── 为什么固定深色、不跟随深浅模式 ──
+        裁剪是「看图」的活：深底能让图片边缘最清楚，也是所有修图软件的做法。
+        状态栏/导航栏一起涂深，整页才是一个整体。
+        （所以这个主题里的色值是**刻意硬编码**的，不引用 colors.xml ——
+         免得夜间模式把它改白。）
+    -->
+    <style name="Theme.Kacha.Crop" parent="Theme.Kacha">
+        <item name="android:windowBackground">#FF121212</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:statusBarColor">#FF121212</item>
+        <item name="android:navigationBarColor">#FF121212</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
     <!-- ==================== 文字 ==================== -->
     <style name="KachaText" parent="Widget.AppCompat.TextView">
         <item name="android:textColor">@color/text_primary</item>

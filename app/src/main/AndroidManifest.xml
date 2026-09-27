@@ -35,13 +35,20 @@
 
     <!--
       ★ 快捷方式自愈（HyperOS 常用）：升级后图标可能变灰/消失，声明这条让系统重建。
-      ★ 这条同时也是「能查到其他 App」的前提之一，但只用于分享目标选择时的
-        queryIntentActivities 结果，不做全量包名枚举。
+      ★ 这条同时也是「能查到其他 App」的前提 —— Android 11+ 的包可见性机制要求：
+        不在这里声明，queryIntentActivities 就**查不到**别的 App。
+
+      ⚠️⚠️ 千万别在这里加 <data android:mimeType="image/*" />（v1.2 的血泪教训）：
+         加了之后系统的包可见性过滤会变**严格** —— 只放行那些「明确声明了能收
+         image/* 」的 App。而微信这类 App 在它自己的清单里写的是更宽的
+         `*/*`，两边对不上号，系统就干脆不让我们「看见」微信
+         → 用户反馈「选择发送目标的列表里没有微信」。
+         正确做法：**只声明 action**，把范围放到最宽（凡是能接分享的都可见）；
+         真正的筛选交给代码里的 queryIntentActivities + 具体 mimeType 去做。
     -->
     <queries>
         <intent>
             <action android:name="android.intent.action.SEND" />
-            <data android:mimeType="image/*" />
         </intent>
     </queries>
 
@@ -83,6 +90,22 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@style/Theme.Kacha.Nudge" />
+
+        <!--
+          ==================== 长图裁剪页（v1.2 新增）====================
+          ★ 长截图拼好之后进这里：图片可上下滚着看，拖上下两根把手剪掉不要的部分，
+            点「完成」才导出。单屏截图**不**进这里（没得裁，弹了反而啰嗦）。
+          ★ excludeFromRecents：它是临时页，不该出现在「最近任务」里 ——
+            用户在最近任务里看到它、切回来，会对着一张不知道哪来的图发懵。
+          ★ 图不走 Intent 传（长图塞 Intent 必崩 TransactionTooLargeException），
+            走同进程静态字段 CropBus。
+        -->
+        <activity
+            android:name=".ui.CropActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Kacha.Crop" />
 
         <!-- ==================== 悬浮球服务 ==================== -->
         <service

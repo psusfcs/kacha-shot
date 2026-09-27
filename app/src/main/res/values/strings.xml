@@ -84,10 +84,10 @@
     <string name="acc_desc">「咔嚓截屏」靠这个服务帮你截图。\n\n它只做两件事：\n· 截取屏幕画面\n· 长截图时模拟手指往下滑\n\n它不会读取屏幕上的文字，不会记录你输入的任何内容，也不会联网。截图只存在你手机里，只会送到你自己选的那个应用。</string>
 
     <!-- ==================== 提示 ==================== -->
-    <string name="tip_scrolling">正在滚动截屏，别碰屏幕…</string>
-    <string name="tip_scroll_frame">已抓 %1$d 屏…</string>
+    <string name="tip_scrolling">正在自动截屏…</string>
+    <string name="tip_scroll_frame">正在自动截屏…　已抓 %1$d 屏</string>
     <string name="scroll_guard_sub">会自动往下滚，到底了自己停</string>
-    <string name="scroll_guard_stop">停下</string>
+    <string name="scroll_guard_stop">完成</string>
     <string name="tip_no_target">还没选发送目标，先去设置里加一个</string>
     <string name="tip_no_overlay">要先给「咔嚓截屏」开悬浮窗权限</string>
     <string name="tip_no_acc">截屏权限没开，点这里去开</string>
@@ -104,4 +104,12 @@
 
     <!-- 打包信息 -->
     <string name="about_version">版本 %1$s（%2$d）</string>
+
+    <!-- ==================== 长图裁剪页（v1.2）==================== -->
+    <string name="crop_title">裁剪</string>
+    <string name="crop_cancel">取消</string>
+    <string name="crop_done">完成</string>
+    <string name="crop_hint">拖动上下两端，裁掉不要的部分（只能裁上下）</string>
+    <string name="crop_no_image">没有要裁剪的图片</string>
+    <string name="crop_failed">裁剪失败了，换张短的试试</string>
 </resources>

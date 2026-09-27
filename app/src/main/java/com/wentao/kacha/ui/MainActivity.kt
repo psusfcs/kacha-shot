@@ -345,8 +345,14 @@ class MainActivity : AppCompatActivity() {
                 row.ivPickIcon.visibility = View.GONE
             }
 
-            // 已添加过的给个视觉区分（名字变灰），避免用户重复添加
-            if (app.pkg in already) {
+            // ★ 勾只在「已添加」时才亮（v1.2）。
+            //   用户原话：「我没有添加进去就不要打勾，我添加进去才打勾」——
+            //   之前那个勾是写死的静态图，每个 App 后面都亮着，等于没有信息量。
+            //   用 INVISIBLE 而不是 GONE：占着位，加过/没加过的行文字还是对齐的。
+            val added = app.pkg in already
+            row.ivPickTick.visibility = if (added) View.VISIBLE else View.INVISIBLE
+            if (added) {
+                // 再加一层文字提示，避免用户只看勾看不出区别
                 row.tvPickName.alpha = 0.45f
                 row.tvPickName.text = "${app.label}  （已添加）"
             }

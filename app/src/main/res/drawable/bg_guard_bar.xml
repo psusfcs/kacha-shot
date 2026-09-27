@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- ★ 滚动遮罩上/下边条：半透明深色 + 圆角（只在上下各留一条，中间完全透出内容）
-     ⚠️ 不要把这个背景加到遮罩根节点上 —— 根节点必须透明，
-        加了就变回全屏黑布，用户看不到它在滚，会自己上手干扰。 -->
+<!-- ★ 长截图底部条底板（v1.2 改浅色）
+     v1.1 之前是半透明深色，压在浅色页面上很重、很突兀。
+     现在用主题的 surface（浅色模式=白 / 深色模式=深灰），跟随系统，
+     跟系统长截图底部那条一致。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@color/guard_bar" />
-    <corners android:radius="14dp" />
+    <solid android:color="@color/surface" />
+    <corners android:radius="26dp" />
 </shape>

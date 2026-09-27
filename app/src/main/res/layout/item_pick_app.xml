@@ -31,10 +31,23 @@
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 
+    <!--
+      ★ 右侧的「已添加」标记（v1.2）
+
+      ⚠️ 这个勾**必须跟着状态走**：加过的才显示，没加的就是空的。
+         v1.1 之前它是张写死的静态图，永远亮着 ——
+         用户看到的是「每个 App 后面都有个勾」，以为分不清加没加过。
+         用户原话：「我没有添加进去就不要打勾，我添加进去才打勾」。
+
+      ⚠️ 用 INVISIBLE 不用 GONE：占着位置，加过/没加过的行文字还是对齐的，
+         否则列表看着会一截一截地错位。
+    -->
     <ImageView
+        android:id="@+id/ivPickTick"
         android:layout_width="16dp"
         android:layout_height="16dp"
-        android:alpha="0.5"
-        android:contentDescription="@string/target_pick_title"
-        android:src="@drawable/ic_check" />
+        android:alpha="0.9"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_check"
+        android:visibility="invisible" />
 </LinearLayout>

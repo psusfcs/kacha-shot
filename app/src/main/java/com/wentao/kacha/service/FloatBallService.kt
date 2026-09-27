@@ -26,7 +26,9 @@ import android.widget.ImageView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.wentao.kacha.R
+import com.wentao.kacha.ui.CropActivity
 import com.wentao.kacha.ui.MainActivity
+import com.wentao.kacha.util.CropBus
 import com.wentao.kacha.util.Exporter
 import com.wentao.kacha.util.Prefs
 import com.wentao.kacha.util.ScrollCapture
@@ -673,7 +675,12 @@ class FloatBallService : Service() {
                     restoreBallAfterShot()
                     scrolling = false
                     when (result) {
-                        is ScrollCapture.Result.Ok -> deliver(result.bitmap, "long")
+                        // ★ v1.2：拼好了**先别急着导出** ——
+                        //   进裁剪页，让用户自己剪掉多余的头尾（用户点名要的交互）。
+                        is ScrollCapture.Result.Ok -> {
+                            Log.d(TAG, "长图拼好了：${result.bitmap.width}×${result.bitmap.height}，进裁剪页")
+                            openCropPage(result.bitmap)
+                        }
 
                         is ScrollCapture.Result.Multi -> {
                             // 拼不成一张长图，但手上有 N 屏好图。
@@ -712,6 +719,36 @@ class FloatBallService : Service() {
                 }
             }
         }.start()
+    }
+
+    // ==================== 长图裁剪 ====================
+
+    /**
+     * 把拼好的长图交给裁剪页（v1.2）。
+     *
+     * ── 为什么不让服务直接导出，非要中间插一页 ──
+     *   自动滚出来的长图，头尾常常带着没用的一截（上一屏的尾巴、页脚广告）。
+     *   以前只能整张全收，现在给用户一把剪刀 —— 剪完再交出去。
+     *
+     * ⚠️⚠️ 图的**归属权**：一旦 put 进 CropBus，就归裁剪页了，
+     *    这里**绝对不能**再 recycle —— 那会让用户对着「已回收的图」直接崩。
+     *
+     * ⚠️ 裁剪页用 `NEW_TASK` 起：这是从 Service 里发起的，
+     *    不加会因为「没有 Activity 栈」而抛异常。
+     */
+    private fun openCropPage(bitmap: Bitmap) {
+        runCatching {
+            CropBus.put(bitmap)
+            startActivity(
+                Intent(this, CropActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.onFailure {
+            Log.w(TAG, "打不开裁剪页：${it.message}")
+            // 起不来就退回老路子 —— 直接把原图导出，别让用户白等一场
+            val back = CropBus.take()
+            if (back != null) deliver(back, "long")
+        }
     }
 
     // ==================== ★ 导出三连（本 App 的终点）====================
@@ -791,22 +828,42 @@ class FloatBallService : Service() {
         }
     }
 
-    // ==================== 长截图遮罩 ====================
+    // ==================== 长截图底部控制条 ====================
 
+    /**
+     * 显示长截图进行中的底部控制条。
+     *
+     * ⚠️⚠️ 这是一个**只占屏幕底部的窄窗口**，绝不是全屏遮罩 —— 这不是审美选择，
+     *    而是「长截图到底能不能用」的生死线（v1.2 修掉的真 bug）：
+     *
+     *      `dispatchGesture` 注入的滑动手势，会被系统送给**最顶层的可触摸窗口**。
+     *      v1.1 之前这里放的是一块全屏遮罩（root = match_parent + clickable），
+     *      手势全被它吃掉，下面的 App 根本收不到滑动 → 页面纹丝不动。
+     *      更坑的是注入接口照样回调「完成」，程序以为滑成功了接着拍下一帧，
+     *      拍到的还是同一屏 → 判定「到底了」→ 收工 → 用户什么都没拿到，
+     *      只看到上下两个黑框闪了一下（用户原话：「上边一个黑框，下边一个黑框，
+     *      但是实际是没有滚动的」）。
+     *
+     *    所以：**窗口只能占底部一条**，中间和上面完全空出来 ——
+     *    没有被窗口覆盖的地方，触摸（包括注入的手势）才会直达下面的 App。
+     *    ⚠️ 不要把它改成 match_parent，也不要在屏幕中间加任何窗口。
+     */
     private fun showScrollGuard() {
         if (guardView != null) return
-        val v = LayoutInflater.from(this).inflate(R.layout.view_scroll_guard, null)
+        val v = LayoutInflater.from(this).inflate(R.layout.view_guard_bar, null)
         val screen = screenSize()
+        val barW = (screen.x - dp(24)).coerceAtLeast(dp(120))
         val p = WindowManager.LayoutParams(
-            screen.x, screen.y,
+            barW,
+            // ★ 高度自适应：窗口就只有这一条这么高，不覆盖屏幕中间的画布
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 0
-            y = 0
+            gravity = Gravity.BOTTOM or Gravity.START
+            x = dp(12)
+            y = dp(24)
         }
         runCatching {
             v.findViewById<View>(R.id.btnGuardStop)?.setOnClickListener {
@@ -816,7 +873,7 @@ class FloatBallService : Service() {
         }
         runCatching { wm.addView(v, p) }
             .onFailure {
-                Log.w(TAG, "遮罩没加上：${it.message}")
+                Log.w(TAG, "底部控制条没加上：${it.message}")
                 return
             }
         guardView = v

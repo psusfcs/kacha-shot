@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ★ 裁剪把手（上下各一条，可拖）
+
+  视觉 = 一条贯穿画面的橘色细线（标出「裁到这儿」）+ 中间一个胶囊抓手（暗示能拖）。
+  整条都是热区（30dp 高），手指随便按在线附近都能拖起来，不用精确点那个小胶囊。
+
+  ⚠️ <item> 的 android:width/height/gravity 需要 API 23+，本 App minSdk 26，安全。
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 贯穿细线：裁切线本体 -->
+    <item
+        android:gravity="center_vertical"
+        android:height="2dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/accent" />
+        </shape>
+    </item>
+
+    <!-- 中间的抓手胶囊 -->
+    <item
+        android:gravity="center"
+        android:width="58dp"
+        android:height="22dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/accent" />
+            <corners android:radius="11dp" />
+        </shape>
+    </item>
+</layer-list>

@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  ★ 长图裁剪页（v1.2 新增）
+
+  ── 它长什么样 ──
+    ┌──────────────────────────┐
+    │  [取消]      裁剪    [完成] │  ← 工具栏
+    ├──────────────────────────┤
+    │  ▓▓▓▓（被裁掉，压暗）▓▓▓▓  │
+    │  ═════════ 上把手 ════════  │ ← 往下拖 = 砍掉开头
+    │       长图（可上下滚着看）   │
+    │  ═════════ 下把手 ════════  │ ← 往上拖 = 砍掉结尾
+    │  ▓▓▓▓（被裁掉，压暗）▓▓▓▓  │
+    ├──────────────────────────┤
+    │  拖动两端可直接裁剪…        │
+    └──────────────────────────┘
+
+  ── 为什么底色固定深色（不跟随深浅模式）──
+    裁剪是「看图」的活，深底能让图片边缘最清楚，也是所有修图软件的做法。
+    这里刻意用硬编码色值，不进 colors.xml —— 免得跟着夜间模式乱变。
+
+  ── 布局结构上的两个要点 ──
+    ① 遮罩和把手都放在 boxCrop（跟图片同一个容器）里：
+       这样它们**跟着图片一起滚动** —— 用户滚到长图中间时，
+       把手依然贴在它对应的那条边界上，不会漂。
+    ② 遮罩高度 / 把手位移都在代码里算（MaskLayout 的 height 初值给 0dp）：
+       布局阶段还不知道图片显示多高，得等测量完。
+  ============================================================================
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF121212">
+
+    <!-- ==================== 顶部工具栏 ==================== -->
+    <LinearLayout
+        android:id="@+id/barCropTop"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_gravity="top"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="6dp"
+        android:paddingRight="6dp">
+
+        <TextView
+            android:id="@+id/btnCropCancel"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:minWidth="64dp"
+            android:paddingLeft="14dp"
+            android:paddingRight="14dp"
+            android:text="@string/crop_cancel"
+            android:textColor="#FFFFFFFF"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/tvCropTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/crop_title"
+            android:textColor="#FFFFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnCropDone"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:minWidth="64dp"
+            android:paddingLeft="14dp"
+            android:paddingRight="14dp"
+            android:text="@string/crop_done"
+            android:textColor="@color/accent"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- ==================== 图片区（可上下滚） ==================== -->
+    <ScrollView
+        android:id="@+id/svCrop"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="56dp"
+        android:layout_marginBottom="46dp"
+        android:overScrollMode="never"
+        android:scrollbars="none">
+
+        <FrameLayout
+            android:id="@+id/boxCrop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <!-- 长图：宽度撑满，高度按图片比例自动算（adjustViewBounds） -->
+            <ImageView
+                android:id="@+id/ivCrop"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:adjustViewBounds="true"
+                android:contentDescription="@string/crop_title"
+                android:scaleType="fitCenter" />
+
+            <!-- 上下两块压暗遮罩（高度由代码按裁剪位置设） -->
+            <View
+                android:id="@+id/maskTop"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_gravity="top"
+                android:background="#B3000000" />
+
+            <View
+                android:id="@+id/maskBottom"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_gravity="bottom"
+                android:background="#B3000000" />
+
+            <!-- 上把手（整条可拖，视觉见 bg_crop_handle） -->
+            <View
+                android:id="@+id/handleTop"
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                android:layout_gravity="top"
+                android:background="@drawable/bg_crop_handle" />
+
+            <!-- 下把手 -->
+            <View
+                android:id="@+id/handleBottom"
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/bg_crop_handle" />
+        </FrameLayout>
+    </ScrollView>
+
+    <!-- ==================== 底部提示 ==================== -->
+    <TextView
+        android:id="@+id/tvCropHint"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_gravity="bottom"
+        android:gravity="center"
+        android:text="@string/crop_hint"
+        android:textColor="#99FFFFFF"
+        android:textSize="13sp" />
+</FrameLayout>

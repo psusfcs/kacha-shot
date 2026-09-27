@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  ★ 长截图进行中的底部条（v1.2 重做）
+
+  ── ★★ 为什么根节点是「窄条」而不是全屏 FrameLayout ──
+    v1.0/v1.1 的遮罩是一个**全屏窗口**（match_parent + clickable），
+    本意是「挡住用户自己乱滑」。结果造成了长截图彻底不能用的 bug：
+
+      dispatchGesture 注入的滑动手势会被送给**最顶层的可触摸窗口** ——
+      也就是那块全屏遮罩。遮罩把事件吃掉，下面的 App 根本收不到滑动，
+      页面纹丝不动；而注入接口照样回「成功」，程序以为滑好了接着拍下一帧，
+      拍到的是同一屏 → 判定「已经到底」→ 收工 → 用户什么都没拿到。
+
+    修法：**窗口只占底部一条，中间和上面完全空出来**。
+    没有窗口覆盖的地方，触摸（包括注入的手势）会直达下面的 App，滑动就生效了。
+    ⚠️ 千万别再把这个布局改成 match_parent 的全屏容器。
+
+  ── 为什么改浅色 ──
+    深色条压在浅色页面（微信、设置页）上很重、很难看。
+    现在用主题的 surface / text_primary，跟随系统深浅色，跟系统长截图那条一致。
+
+  ⚠️ 拍摄时这条会**真移除**（不是设 INVISIBLE）——
+     窗口还在合成层里就会被拍进去，HyperOS 上还会糊一块。
+  ============================================================================
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_guard_bar"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingLeft="16dp"
+    android:paddingTop="11dp"
+    android:paddingRight="10dp"
+    android:paddingBottom="11dp">
+
+    <ProgressBar
+        android:id="@+id/pbGuard"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:indeterminate="true"
+        android:indeterminateTint="@color/accent" />
+
+    <TextView
+        android:id="@+id/tvGuardText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="12dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:text="@string/tip_scrolling"
+        android:textColor="@color/text_primary"
+        android:textSize="14sp" />
+
+    <!-- 文案是「完成」不是「停下」：用户看到"完成"知道是"我截好了"，
+         看到"停下"会以为出了什么事。同一个动作，说法要对上直觉。 -->
+    <TextView
+        android:id="@+id/btnGuardStop"
+        android:layout_width="wrap_content"
+        android:layout_height="38dp"
+        android:layout_marginLeft="10dp"
+        android:background="@drawable/bg_guard_stop"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:minWidth="78dp"
+        android:paddingLeft="18dp"
+        android:paddingRight="18dp"
+        android:text="@string/scroll_guard_stop"
+        android:textColor="@color/text_on_accent"
+        android:textSize="14sp" />
+</LinearLayout>
