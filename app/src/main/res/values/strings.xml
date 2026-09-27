@@ -105,8 +105,15 @@
     <!-- 打包信息 -->
     <string name="about_version">版本 %1$s（%2$d）</string>
 
-    <!-- 小米「后台弹出界面」权限自助入口（v1.4）——只在小米系手机上显示 -->
-    <string name="help_jump_permission">跳转不了？点这里开权限</string>
+    <!-- ==================== 状态区：后台弹出界面（v1.6，小米系专属）==================== -->
+    <string name="status_jump">后台弹出界面</string>
+    <string name="status_jump_ok">已允许，截图后能正常跳转</string>
+    <string name="status_jump_blocked">被系统拦截，截图后跳不过去</string>
+    <string name="btn_jump_fix">去开</string>
+
+    <!-- 「发给谁」列表折叠开关（v1.6）—— 展开文案里的 %1$d 是已加数量 -->
+    <string name="targets_toggle_expand">展开（已加 %1$d 个）▾</string>
+    <string name="targets_toggle_collapse">收起 ▴</string>
 
     <!-- ==================== 长图裁剪页（v1.2）==================== -->
     <string name="crop_title">裁剪</string>

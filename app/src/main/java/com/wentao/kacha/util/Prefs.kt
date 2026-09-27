@@ -83,6 +83,18 @@ class Prefs(context: Context) {
         get() = sp.getFloat(KEY_BALL_Y_RATIO, DEFAULT_BALL_Y_RATIO).coerceIn(0f, 1f)
         set(v) = sp.edit().putFloat(KEY_BALL_Y_RATIO, v.coerceIn(0f, 1f)).apply()
 
+    /**
+     * 分享跳转被系统拦过（v1.6）。
+     *
+     * ★ 首页那个「跳转不了？点这里开权限」**平时不显示** ——
+     *   用户原话：「截图跳转这个提示有什么用？」—— 跳转正常的人要它干嘛。
+     *   只在 verifyJumped 真的验证到「被系统拦了」之后才置 true，
+     *   首页据此把自助入口亮出来；用户点过之后就先收起来。
+     */
+    var jumpBlocked: Boolean
+        get() = sp.getBoolean(KEY_JUMP_BLOCKED, false)
+        set(v) = sp.edit().putBoolean(KEY_JUMP_BLOCKED, v).apply()
+
     /** 开机自动启动悬浮球 */
     var bootAutoStart: Boolean
         get() = sp.getBoolean(KEY_BOOT_AUTO_START, true)
@@ -213,6 +225,7 @@ class Prefs(context: Context) {
         private const val KEY_BALL_AUTO_HIDE = "ball_auto_hide"
         private const val KEY_BALL_ON_LEFT = "ball_on_left"
         private const val KEY_BALL_Y_RATIO = "ball_y_ratio"
+        private const val KEY_JUMP_BLOCKED = "jump_blocked"
         private const val KEY_BOOT_AUTO_START = "boot_auto_start"
 
         private const val KEY_TARGETS = "targets_json"

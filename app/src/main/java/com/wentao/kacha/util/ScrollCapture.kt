@@ -162,6 +162,10 @@ object ScrollCapture {
 
         val frames = mutableListOf(first)
         var stillCount = 0
+        // ★ v1.6：诊断计数 —— 失败时告诉用户「滑了几次、有没有滑成功」，
+        //   不然他只能看到一句「滑不动」，没法反馈到底是哪种情况。
+        var swipeAttempts = 0
+        var swipeFailures = 0
 
         // ② 一屏一屏往下滑
         for (i in 2..maxFrames) {
@@ -183,7 +187,9 @@ object ScrollCapture {
                 listener?.onLog("手势滑不动，改用节点滚动…")
                 ok = scrollForwardViaNode(service)
             }
+            swipeAttempts++
             if (!ok) {
+                swipeFailures++
                 listener?.onLog("滑不动了（手势和节点都被拒）")
                 break
             }
@@ -241,9 +247,17 @@ object ScrollCapture {
         // ★ v4.1 只截到 1 屏：说明页面根本没滚动
         if (frames.size < 2) {
             frames.forEach { if (!it.isRecycled) it.recycle() }
+            // ★ v1.6：把「滑了几次、滑没滑成」说清楚 —— 两种失败的根源完全不同：
+            //   · 滑动本身失败（swipeFailures > 0）→ 系统没执行手势（权限 / 系统层问题）
+            //   · 滑动成功但画面没变 → 页面真的不能滚，或者已经在底部
+            //   用户看到数字才能准确反馈，我们才能对症下药。
+            val why = if (swipeFailures > 0)
+                "系统没有执行滑动（试了 $swipeAttempts 次）"
+            else
+                "滑了 $swipeAttempts 次、画面都没变化"
             return Result.Fail(
-                "这一屏好像滑不动（可能已经是底部，或者这个页面不支持滚动）。" +
-                    "先给你这一屏，我照样能分析。",
+                "长截图没成：$why。这个页面可能不支持滚动，或者已经在底部。" +
+                    "先给你这一屏。",
                 null
             )
         }

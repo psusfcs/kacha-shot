@@ -88,32 +88,41 @@ object AppFinder {
         val strict = querySenders(context, "image/*")
         val loose = querySenders(context, "*/*")
 
-        // ★★ 按包名**分组**，不是简单覆写 —— 这是「列表里没有微信」的真凶。
-        //
-        //   一个 App 往往有**好几个分享入口**：微信就有「微信」「朋友圈」「收藏」三个，
-        //   它们的包名都是 com.tencent.mm。v1.2 之前这里是 `merged[pkg] = ri`，
-        //   谁最后遍历到谁就把前面的顶掉 —— 结果用户看到的是「朋友圈」，
-        //   而**真正想找的「微信」压根没出现**。
-        //   （用户原话：「连朋友圈都有为什么没有微信」——一句话定位到这儿。）
-        //
-        //   现在每个包先把所有入口收齐，再挑一个最能代表这个 App 的（见 pickMainEntry）。
-        val byPkg = LinkedHashMap<String, MutableList<Pair<ResolveInfo, Boolean>>>()
+        // ★★ 按包名**分组**收集（一个 App 有多个分享入口，包名相同）。
+        //    记录的只是「这个包有没有严格收图片的入口」，用于排序 ——
+        //    **显示名和图标一律用应用级信息**（见下面 mapNotNull 的说明）。
+        val byPkg = LinkedHashMap<String, Boolean>()
         strict.forEach { ri ->
             val pkg = ri.activityInfo?.packageName ?: return@forEach
-            byPkg.getOrPut(pkg) { mutableListOf() }.add(ri to true)
+            byPkg[pkg] = true
         }
         loose.forEach { ri ->
             val pkg = ri.activityInfo?.packageName ?: return@forEach
-            // 已经有严格匹配入口的包就不再加宽松的了（同一入口别重复收）
-            if (byPkg[pkg] == null) byPkg[pkg] = mutableListOf(ri to false)
+            if (!byPkg.containsKey(pkg)) byPkg[pkg] = false
         }
 
         val self = context.packageName
         return byPkg.entries
             .filter { (pkg, _) -> pkg != self && pkg !in exclude }
-            .mapNotNull { (pkg, entries) ->
-                val (ri, isStrict, label) = pickMainEntry(pm, pkg, entries)
-                val icon = runCatching { ri.loadIcon(pm) }.getOrNull()
+            .mapNotNull { (pkg, isStrict) ->
+                // ★★ v1.6 关键修正：显示名和图标用「应用级」信息 ——
+                //    **绝不能用分享入口的 Activity 名**！
+                //
+                //    v1.5 之前用 ri.loadLabel()，微信列出的是「发送到微信状态」
+                //    「朋友圈」这种**入口名** —— 用户在列表里找「微信」找不到，
+                //    因为那条记录的名字根本不叫微信。
+                //    （用户原话：「选项里根本就没有微信」——其实就是那条，
+                //      只是名字被显示成了入口名。）
+                //
+                //    getApplicationInfo 对**可见的包**（queries 放行的）一定能拿到，
+                //    拿到的名字就是用户在桌面上看到的（「微信」）—— 这才认得出来。
+                //    至于实际发送，走 Exporter.shareToApp 的 setPackage(pkg)，
+                //    系统会在该包内自动挑能接图的入口，不需要我们选。
+                val label = runCatching {
+                    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                        .ifBlank { pkg }
+                }.getOrDefault(pkg)
+                val icon = runCatching { pm.getApplicationIcon(pkg) }.getOrNull()
                 Scored(AppItem(label, pkg, icon), isStrict, isSystemApp(pm, pkg), label)
             }
             // 排序三段：① 第三方 App 优先（系统组件沉底）
@@ -125,55 +134,6 @@ object AppFinder {
                     .thenBy { it.label.lowercase() }
             )
             .map { it.item }
-    }
-
-    /**
-     * 一个 App 可能有好几个分享入口，挑出**最能代表它的那一个**。
-     *
-     * ★★ 为什么必须挑（而不是随便取一个）：微信的三个入口分别叫
-     *    「微信」「朋友圈」「收藏」。用户要"发给微信"，
-     *    那就必须把入口名叫「微信」的那个挑出来 —— 挑到「朋友圈」等于功能废了。
-     *
-     * 打分规则（越高越优先）：
-     *   ① 入口名 **等于**应用名 → 这就是主入口（微信的聊天分享入口正好叫「微信」）
-     *   ② 入口名 **包含**应用名（如「微信收藏」）→ 次优
-     *   ③ 其余：**名字越短越可能更通用**（"朋友圈"比"朋友圈收藏"更像主入口）
-     *   ④ 同分时优先「严格收图片」的那个
-     *
-     * @return Triple(入口信息, 是否严格收图片, 显示名)
-     */
-    private fun pickMainEntry(
-        pm: PackageManager,
-        pkg: String,
-        entries: List<Pair<ResolveInfo, Boolean>>
-    ): Triple<ResolveInfo, Boolean, String> {
-        val appLabel = runCatching {
-            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
-        }.getOrDefault("")
-
-        var bestRi = entries[0].first
-        var bestStrict = entries[0].second
-        var bestLabel = runCatching { bestRi.loadLabel(pm).toString() }.getOrDefault(pkg)
-        var bestScore = Int.MIN_VALUE
-
-        for ((ri, strict) in entries) {
-            val lbl = runCatching {
-                ri.loadLabel(pm).toString().ifBlank { pkg }
-            }.getOrDefault(pkg)
-            val base = when {
-                appLabel.isNotBlank() && lbl.equals(appLabel, ignoreCase = true) -> 100_000
-                appLabel.isNotBlank() && lbl.contains(appLabel) -> 50_000
-                else -> 10_000 - lbl.length
-            }
-            val score = base + if (strict) 1 else 0
-            if (score > bestScore) {
-                bestScore = score
-                bestRi = ri
-                bestStrict = strict
-                bestLabel = lbl
-            }
-        }
-        return Triple(bestRi, bestStrict, bestLabel)
     }
 
     /** 问系统：能接住 SEND + 指定 mimeType 的都有谁 */

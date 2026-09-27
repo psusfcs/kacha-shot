@@ -61,6 +61,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var b: ActivityMainBinding
+
+
+    /** 「发给谁」列表是否展开（不持久化：每次进首页默认收起，免得满屏都是） */
+    private var targetsExpanded = false
     private lateinit var prefs: Prefs
 
     /**
@@ -80,8 +84,8 @@ class MainActivity : AppCompatActivity() {
 
         setupStatusSection()
         setupTargetSection()
+        setupTargetsToggle()
         setupSwitchSection()
-        setupJumpHelp()
         setupVersion()
 
         // Android 13+ 首次进来顺手问一下通知权限
@@ -130,6 +134,28 @@ class MainActivity : AppCompatActivity() {
 
     // ==================== ① 状态区 ====================
 
+    /**
+     * 「发给谁」列表的折叠开关。
+     * ★ 默认收起：只露「默认发给 X」一行，加了多少个都不占地方（用户：满屏拉受不了）。
+     */
+    private fun setupTargetsToggle() {
+        b.tvTargetsToggle.setOnClickListener {
+            targetsExpanded = !targetsExpanded
+            applyTargetsExpanded()
+        }
+    }
+
+    /** 折叠开关按下后：管理列表显隐 + 开关文字（带已加数量）切换 */
+    private fun applyTargetsExpanded() {
+        b.tvTargetsToggle.text = getString(
+            if (targetsExpanded) R.string.targets_toggle_collapse
+            else R.string.targets_toggle_expand,
+            prefs.targets.size
+        )
+        // 「默认发给 X」永远可见 —— 那是用户最关心的；收起只是把管理列表藏起来
+        b.boxTargets.visibility = if (targetsExpanded) View.VISIBLE else View.GONE
+    }
+
     private fun setupStatusSection() {
         // 悬浮窗权限
         b.btnOverlay.setOnClickListener {
@@ -142,6 +168,15 @@ class MainActivity : AppCompatActivity() {
 
         // 截屏权限（无障碍）
         b.btnAcc.setOnClickListener { openAccessibilitySettings() }
+
+        // 后台弹出界面（小米）：被拦时点「去开」直达权限页
+        b.btnJumpFix.setOnClickListener {
+            prefs.jumpBlocked = false
+            refreshStatus()
+            if (!openMiuiPermEditor()) {
+                toast("没找到权限页，去「设置 → 应用管理 → 咔嚓截屏」里找「后台弹出界面」")
+            }
+        }
 
         // 启动 / 关闭悬浮球
         b.btnBallToggle.setOnClickListener {
@@ -194,6 +229,21 @@ class MainActivity : AppCompatActivity() {
         b.btnBallToggle.text = getString(
             if (ballOk) R.string.btn_ball_toggle_off else R.string.btn_ball_toggle_on
         )
+
+        // 后台弹出界面（v1.6）：只有小米系显示整行。
+        // 状态判据 = prefs.jumpBlocked（verifyJumped 实测被拦才置 true）——
+        // 这个权限没法直接读（小米私有），只能用「实际跳转结果」反推。
+        if (isMiui()) {
+            b.rowJumpState.visibility = View.VISIBLE
+            val blocked = prefs.jumpBlocked
+            b.ivJumpState.setImageResource(if (blocked) R.drawable.ic_warn else R.drawable.ic_check)
+            b.tvJumpState.text = getString(
+                if (blocked) R.string.status_jump_blocked else R.string.status_jump_ok
+            )
+            b.btnJumpFix.visibility = if (blocked) View.VISIBLE else View.GONE
+        } else {
+            b.rowJumpState.visibility = View.GONE
+        }
     }
 
     private fun openOverlaySettings() {
@@ -297,6 +347,10 @@ class MainActivity : AppCompatActivity() {
 
             b.boxTargets.addView(row.root)
         }
+
+        // ★ v1.6：折叠开关的文字/显隐跟随数量（空列表时开关隐藏，只露空态提示）
+        b.tvTargetsToggle.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
+        applyTargetsExpanded()
     }
 
     /**
@@ -336,7 +390,10 @@ class MainActivity : AppCompatActivity() {
 
         val already = prefs.targets.map { it.pkg }.toSet()
 
-        apps.forEach { app ->
+        // ★ v1.6：已添加的排最前 —— 高频用的就那几个，
+        //   别让用户在一长排里往下找微信找到地老天荒。
+        //   （sortedByDescending 是稳定排序：已添加的保持原有顺序，未添加的也保持）
+        apps.sortedByDescending { it.pkg in already }.forEach { app ->
             val row = ItemPickAppBinding.inflate(LayoutInflater.from(this), box, false)
             row.tvPickName.text = app.label
             if (app.icon != null) {
@@ -346,23 +403,24 @@ class MainActivity : AppCompatActivity() {
                 row.ivPickIcon.visibility = View.GONE
             }
 
-            // ★ 勾只在「已添加」时才亮（v1.2）。
-            //   用户原话：「我没有添加进去就不要打勾，我添加进去才打勾」——
-            //   之前那个勾是写死的静态图，每个 App 后面都亮着，等于没有信息量。
-            //   用 INVISIBLE 而不是 GONE：占着位，加过/没加过的行文字还是对齐的。
+            // 勾 = 「已经在发送目标列表里」（只是状态标记，**不拦截点击**）
             val added = app.pkg in already
             row.ivPickTick.visibility = if (added) View.VISIBLE else View.INVISIBLE
-            if (added) {
-                // 再加一层文字提示，避免用户只看勾看不出区别
-                row.tvPickName.alpha = 0.45f
-                row.tvPickName.text = "${app.label}  （已添加）"
-            }
 
+            // ★★ v1.6 交互修正：点任何一个 App = **把它设为默认发送目标**。
+            //    以前的逻辑：已添加的再点一下，只会弹「已经在列表里了」——
+            //    用户点「微信（已添加）」什么都不会发生，在他看来就是
+            //    「微信点了没反应 / 微信选不了 / 微信没出来」。
+            //    用户原话：「你把它默认加进去……关键你有的加，有的不加，你这是怎么弄的」
+            //    —— 他在意的从来不是"添加"这个动作，而是**"我要发给它"**。
+            //    现在语义统一：**这个列表就是「选发给谁」，点了立即生效**，
+            //    在不在列表里只是顺便的事（不在就顺手加进来）。
             row.root.setOnClickListener {
-                val isNew = prefs.addTarget(app.label, app.pkg)
+                prefs.addTarget(app.label, app.pkg)
+                prefs.defaultTargetPkg = app.pkg
                 refreshTargets()
                 dialog.dismiss()
-                toast(if (isNew) "已添加「${app.label}」" else "「${app.label}」已经在列表里了")
+                toast("默认发给「${app.label}」")
             }
             box.addView(row.root)
         }
@@ -453,16 +511,6 @@ class MainActivity : AppCompatActivity() {
      *   是小米自己加的管控），只能引导用户去系统权限页手动开 ——
      *   所以这里给一个一键直达的入口。
      */
-    private fun setupJumpHelp() {
-        if (!isMiui()) return          // 不是小米系就不显示这一行
-        b.btnJumpHelp.visibility = View.VISIBLE
-        b.btnJumpHelp.setOnClickListener {
-            if (!openMiuiPermEditor()) {
-                toast("没找到权限页，去「设置 → 应用管理 → 咔嚓截屏」里找「后台弹出界面」")
-            }
-        }
-    }
-
     /**
      * 是不是小米系（MIUI / HyperOS）。
      *

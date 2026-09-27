@@ -1172,6 +1172,9 @@ class FloatBallService : Service() {
                 val fg = ShotAccessibilityService.lastForegroundPackage
                 if (fg == pkg) return@runCatching
                 Log.w(TAG, "分享后前台仍是「$fg」（期望 $pkg）→ 跳转可能被系统拦了")
+                // ★ v1.6：记一笔，首页的「跳转不了？点这里开权限」据此才亮出来
+                //   （平时不显示 —— 跳转正常的人要它干嘛，用户原话「有什么用」）
+                prefs.jumpBlocked = true
                 flashBallFail()
                 showOverlayTip("没跳转成功（图已存相册）。多半是缺「后台弹出界面」权限")
             }

@@ -232,6 +232,65 @@
                     android:text="@string/btn_ball_toggle_on"
                     style="@style/KachaButtonPrimary" />
             </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="12dp"
+                android:background="@color/divider" />
+
+            <!--
+              后台弹出界面（v1.6）：小米系专属的隐形杀手权限 ——
+              默认禁止时，后台启动 Activity 被**静默拦截**（不报错也不跳转）。
+              ⚠️ 整行只在小米系手机上显示（代码控制 rowJumpState.visibility），
+                 其它 ROM 没有这个权限概念，显示了反而让用户懵。
+            -->
+            <LinearLayout
+                android:id="@+id/rowJumpState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <ImageView
+                    android:id="@+id/ivJumpState"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:contentDescription="@string/status_jump"
+                    android:src="@drawable/ic_check" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="11dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/status_jump"
+                        style="@style/KachaRowTitle" />
+
+                    <TextView
+                        android:id="@+id/tvJumpState"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/status_jump_ok"
+                        style="@style/KachaRowSub" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/btnJumpFix"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_jump_fix"
+                    style="@style/KachaChip" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- ==================== 3. 目标 App 卡片 ==================== -->
@@ -272,6 +331,26 @@
                     android:textColor="@color/accent"
                     android:textSize="16sp"
                     android:textStyle="bold" />
+
+                <!--
+                  折叠开关（v1.6）：加了几个目标之后，整排 chip 会把首屏拉满 ——
+                  默认只露「默认发给 X」，点这里才展开完整列表。
+                  文字由代码填（带已加数量）。
+                -->
+                <TextView
+                    android:id="@+id/tvTargetsToggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="10dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingLeft="10dp"
+                    android:paddingTop="6dp"
+                    android:paddingRight="2dp"
+                    android:paddingBottom="6dp"
+                    android:text="@string/targets_toggle_expand"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
             </LinearLayout>
 
             <!-- 空态提示 -->
@@ -571,31 +650,6 @@
                 android:text="@string/help_note4"
                 style="@style/KachaRowSub" />
 
-            <!--
-              ★ 跳转不了时的自助入口（v1.4）
-
-              ⚠️ 只在小米系手机上显示（代码里控制 visibility，其它机型默认 GONE）：
-                 小米有个「后台弹出界面」权限，**默认是禁止的** ——
-                 从后台服务启动 Activity 会被**静默拦掉**（不报错、也不跳转），
-                 用户看到的现象就是「图存进相册了，但没跳转」。
-                 用户实测反馈过这个，所以给一个一键直达的入口。
-            -->
-            <TextView
-                android:id="@+id/btnJumpHelp"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_chip"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:minHeight="42dp"
-                android:paddingLeft="14dp"
-                android:paddingRight="14dp"
-                android:text="@string/help_jump_permission"
-                android:textColor="@color/accent"
-                android:textSize="13sp"
-                android:visibility="gone" />
         </LinearLayout>
 
         <!-- ==================== 6. 版本号 ==================== -->
