@@ -31,7 +31,14 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FF121212">
+    android:background="#FF121212"
+    android:fitsSystemWindows="true">
+
+    <!--
+      ★★ fitsSystemWindows（v1.9 补）：没有它，工具栏会顶到屏幕最顶上 ——
+         「完成」被压到状态栏的电池旁边，勉强才点得到（用户实测）。
+         加上它，整个页面自动从状态栏下方开始排，工具栏回到正常位置。
+    -->
 
     <!-- ==================== 顶部工具栏 ==================== -->
     <LinearLayout

@@ -85,7 +85,7 @@ object ScrollCapture {
      *   帧全被丢 → 用户看到「滑了 N 次、画面都没变化」，可页面明明在滚。
      *   惯性彻底停稳后再拍，位移回到纯手势的可预期范围，判定和拼接就都对了。
      */
-    private const val SETTLE_MS = 1150L
+    private const val SETTLE_MS = 1300L
 
     /** 系统限制无障碍截图频率约 1 张/秒，两帧之间至少隔这么久 */
     private const val MIN_FRAME_GAP_MS = 620L
@@ -98,7 +98,7 @@ object ScrollCapture {
      * 300ms 在部分 ROM 上会被判成「快速 fling」，滑过头直接跳过内容；
      * 450ms 更接近人手匀速滑，滚动距离可控、不会跳过。
      */
-    private const val SCROLL_GESTURE_MS = 600L
+    private const val SCROLL_GESTURE_MS = 700L
 
     /**
      * 滚动截屏的进度回调（都跑在主线程）。
@@ -109,6 +109,19 @@ object ScrollCapture {
     interface Listener {
         fun onProgress(frame: Int, total: Int)
         fun onLog(message: String)
+
+        /**
+         * 拼接出一段新内容了 —— 把「当前已拼好的长图」交给上层做**实时预览**。
+         *
+         * ★ v1.9 新增（用户要求对齐系统长截图的体验）：
+         *   「有一只手在后台翻页，前头有个东西给你看」——
+         *   每截一屏，预览图等比长一截，截漏了当场就能看见。
+         *
+         * ⚠️ [snapshot] 是内部增量画布**本体**（只读！绝不能 recycle / 修改），
+         *    上层要显示请自己 createScaledBitmap 出缩略图。
+         *    每次回调都是同一个对象（内容在变），显示完一帧就可以丢弃缩略图。
+         */
+        fun onPreview(snapshot: Bitmap, visibleH: Int) {}
     }
 
     /** 结果：要么给一张长图，要么给「多屏原图」让 AI 自己读，要么彻底失败 */
@@ -172,6 +185,13 @@ object ScrollCapture {
 
         val frames = mutableListOf(first)
         var stillCount = 0
+
+        // ★★ v1.9：增量拼接画布 —— 每抓一帧就把新内容追加进来，
+        //   预览窗实时「长一截」（对齐系统长截图的体验：后台翻页，前台给预览）。
+        //   旧做法是最后一次性 stitch，中途用户什么都看不见，截漏了也不知道。
+        var acc = Bitmap.createBitmap(first.width, first.height, Bitmap.Config.ARGB_8888)
+        Canvas(acc).drawBitmap(first, 0f, 0f, null)
+        var accH = first.height
         // ★ v1.6：诊断计数 —— 失败时告诉用户「滑了几次、有没有滑成功」，
         //   不然他只能看到一句「滑不动」，没法反馈到底是哪种情况。
         var swipeAttempts = 0
@@ -222,7 +242,21 @@ object ScrollCapture {
             //    这个判据不会骗人 —— 真滚了，就一定有重叠；没滚，重叠就是整屏。
             //    （findOverlap 内部已经把「重叠太多」归零了，所以 > 0 就是真滚了。）
             val diff = averageDiff(frames.last(), bmp)
-            val scrolled = diff >= STILL_TOLERANCE && hasRealScroll(frames.last(), bmp)
+
+            // ★ v1.9：prev 像素取「增量画布的尾部」—— 也就是上一帧的内容。
+            //   对齐用**分条共识**（三条横带独立找位置、投票），聊天页里
+            //   大量相似消息卡片不再能把对齐带偏（那是「每屏只新增半屏」的真凶）。
+            val prevTop = (accH - bmp.height).coerceAtLeast(0)
+            val prevH2 = accH - prevTop
+            val prevPx = IntArray(bmp.width * prevH2)
+            acc.getPixels(prevPx, 0, bmp.width, 0, prevTop, bmp.width, prevH2)
+            val curPx = IntArray(bmp.width * bmp.height)
+            bmp.getPixels(curPx, 0, bmp.width, 0, 0, bmp.width, bmp.height)
+
+            val overlap = findOverlap(prevPx, prevH2, curPx, bmp.height, bmp.width)
+            // 判「有滚动」：整帧色差 + （三带共识对上 或 中段色差大 —— v1.8 双保险保留）
+            val scrolled = diff >= STILL_TOLERANCE &&
+                (overlap > 0 || regionDiff(prevPx, curPx, bmp.width, prevH2, 0.30f, 0.70f) > 15.0)
 
             if (!scrolled) {
                 stillCount++
@@ -236,9 +270,37 @@ object ScrollCapture {
             }
             stillCount = 0
 
+            if (overlap <= 0) {
+                // ★ v1.9：共识没对上、但内容确实在滚 —— 这帧**先丢**。
+                //   对不齐就追加进长图，等于拼歪；等下一帧重新对齐才是正解。
+                listener?.onLog("第 $i 帧对不上（可能滚快了），丢弃等下一帧")
+                bmp.recycle()
+                continue
+            }
+
+            // 增量绘制：cur 从 overlap 行往下的都是新内容，追加到画布底部
+            val newRows = bmp.height - overlap
+            if (newRows > 0 && accH + newRows <= MAX_RESULT_ROWS) {
+                val bigger = Bitmap.createBitmap(bmp.width, accH + newRows, Bitmap.Config.ARGB_8888)
+                val c = Canvas(bigger)
+                c.drawBitmap(acc, 0f, 0f, null)
+                c.drawBitmap(
+                    bmp,
+                    0f, overlap.toFloat(),
+                    0f, accH.toFloat(),
+                    bmp.width.toFloat(), newRows.toFloat(),
+                    true, null
+                )
+                runCatching { if (acc !== bigger && !acc.isRecycled) acc.recycle() }
+                acc = bigger
+                accH += newRows
+            }
+
             frames.add(bmp)
             listener?.onProgress(frames.size, maxFrames)
             listener?.onLog("抓第 ${frames.size} 屏（跟上一屏差异 ${"%.1f".format(diff)}）")
+            // ★ v1.9：实时预览 —— 每截一屏，悬浮预览窗「长一截」（只读传引用）
+            listener?.onPreview(acc, accH)
 
             // ★ v5.3：抓完这一屏也查一次，点了停下就立刻收尾，
             //   不用等这一轮后面那些 sleep 走完。
@@ -272,26 +334,14 @@ object ScrollCapture {
             )
         }
 
-        listener?.onLog("共 ${frames.size} 屏，开始拼接…")
-        val stitched = stitch(frames, listener)
-
-        return when {
-            stitched != null -> {
-                val count = frames.size
-                frames.forEach { if (!it.isRecycled) it.recycle() }
-                listener?.onLog("拼好了：${stitched.width}×${stitched.height}")
-                Result.Ok(stitched, count)
-            }
-
-            else -> {
-                // ★ v4.1 关键改动：拼不成一张长图 **不再直接判失败**，
-                //   改成把这几屏原图打包交给上层，让 AI 一次读多张图。
-                //   用户原话：「自动多截几屏，一起发给 AI」。
-                //   原图没压缩、字清楚，比硬拼一张错位长图靠谱得多。
-                listener?.onLog("拼不成一张长图，改成把 ${frames.size} 屏原图一起交给 AI")
-                Result.Multi(frames.toList())
-            }
-        }
+        // ★ v1.9：增量模式下 acc 本身就是拼好的长图（每帧都对齐过才追加的），
+        //   不再做最后一次性 stitch —— 老版本那一步正是接缝错位的另一个来源。
+        //   frames 里只是原始单屏（留作 Multi 兜底路径），拼好后即可释放。
+        val stitched = acc
+        val okCount = frames.size
+        frames.forEach { if (!it.isRecycled) it.recycle() }
+        listener?.onLog("拼好了：${stitched.width}×${stitched.height}（$okCount 屏）")
+        Result.Ok(stitched, okCount)
     }
 
     /**
@@ -534,15 +584,20 @@ object ScrollCapture {
     }
 
     /**
-     * 在 prev 里找 cur 里某一小段内容出现在哪一行。
+     * 在 prev 里找 cur 的对齐位置 —— **分条共识版**（v1.9）。
      *
-     * ★★ v1.5 关键修正：指纹**不再取 cur 的顶部**，改取**中段**（见 [PROBE_RATIO]）。
-     *    原因：顶部常被**吸顶栏**占着，滚动后它原封不动，
-     *    拿它去找必然在 prev 顶部匹配到 → 算出「重叠=整屏」→ 直接判失败。
-     *    这就是用户实测「长图永远拼不上、永远只给一屏」的真凶。
+     * ★★ 为什么要「分条 + 投票」（用户实测：滑了三屏只截到一屏半、没截全）：
+     *   聊天页里大量**长得一模一样的消息卡片**。旧版只取一条指纹去 prev 里找，
+     *   找到相似但更靠上的位置 → 重叠算多了 → 每屏只新增半屏 → 内容缺失。
+     *
+     *   新做法（业界叫 strips consensus / 分条共识）：
+     *   把画面切成三条横带（18% / 30% / 42% 高度处），每条**独立**去 prev 里
+     *   找自己的对齐位置；真滚动时三条带的结论必须一致 ——
+     *   取多数一致的（中位数）当结果；互相打架（极差 > 12 行）就判定不可信，
+     *   宁可不拼也不拼歪。个别区域有动画 / 吸顶干扰，会被另外两条带票死。
      *
      * @return 重叠行数（cur 顶部有 overlap 行和 prev 底部重复）；
-     *         0 表示没找到可靠匹配（宁可不拼）
+     *         0 表示三条带没有共识（宁可不拼）
      */
     private fun findOverlap(
         prevPx: IntArray, prevH: Int,
@@ -552,44 +607,37 @@ object ScrollCapture {
         val rows = minOf(MATCH_ROWS, curH / 3)
         if (rows < 4 || prevH < rows + 8) return 0
 
-        // ★★ v1.7：逐行扫描（step=1）—— 这是「两屏接头处错位」的核心修复。
-        //   原来自适应步长 ≈ 9 行，bestRow 有 ±9 行的误差 → 拼接处就会
-        //   **重复或丢一截内容**（用户实测：两屏中间出现明显的「接头」；
-        //   业界同理：偏 4 个像素就会 duplicate or drop 一条内容）。
-        //   开销实测可控：2400 行 × 每位置 384 次采样 ≈ 92 万次简单运算，
-        //   几十毫秒，而每帧之间本来就要等 1 秒以上。
-        val step = 1
+        // 三条指纹带的高度位置：都避开顶部吸顶栏（~10%），
+        // 且最靠下的 0.42 + 最大位移(~0.56) 也不超出 prev 底部。
+        val bands = listOf(0.18f, 0.30f, 0.42f)
 
-        // ★ 指纹位置：cur 的中段（避开顶部吸顶栏，也不碰最底下）
-        val probeRow = (curH * PROBE_RATIO).toInt().coerceIn(1, curH - rows - 1)
-
-        var bestRow = -1
-        var bestScore = Double.MAX_VALUE
-
-        // 从 prev 的第 1 行开始扫（第 0 行是上一屏的顶，通常是状态栏，干扰大）
-        var r = 1
-        while (r <= prevH - rows - 1) {
-            val score = rowBlockDiff(prevPx, prevH, r, curPx, probeRow, rows, width)
-            if (score < bestScore) {
-                bestScore = score
-                bestRow = r
+        val tops = mutableListOf<Int>()   // 每条带算出的「cur 第 0 行在 prev 里的位置」
+        for (ratio in bands) {
+            val probeRow = (curH * ratio).toInt().coerceIn(1, curH - rows - 1)
+            var bestRow = -1
+            var bestScore = Double.MAX_VALUE
+            var r = 1
+            while (r <= prevH - rows - 1) {
+                val score = rowBlockDiff(prevPx, prevH, r, curPx, probeRow, rows, width)
+                if (score < bestScore) {
+                    bestScore = score
+                    bestRow = r
+                }
+                r++
             }
-            r += step
+            if (bestRow < 0 || bestScore > MATCH_TOLERANCE) continue
+            val top = bestRow - probeRow
+            if (top > 0) tops.add(top)
         }
 
-        if (bestRow < 0 || bestScore > MATCH_TOLERANCE) return 0
+        if (tops.isEmpty()) return 0
+        tops.sort()
+        // ★ 共识判定：三条带结论必须基本一致（极差 <= 12 行），取中位数
+        if (tops.last() - tops.first() > 12) return 0
+        val median = tops[tops.size / 2]
+        if (median <= 0) return 0
 
-        // bestRow = 「cur 的 probeRow 那一行」在 prev 里的位置。
-        // 那么 cur 的**第 0 行**在 prev 里位于 (bestRow - probeRow)。
-        val topInPrev = bestRow - probeRow
-        if (topInPrev <= 0) {
-            // cur 第 0 行落在 prev 顶部或之上 → 几乎没滚动（或者往上跑了），别拼
-            return 0
-        }
-
-        // prev 从 topInPrev 往下的部分，跟 cur 的开头是重复的 —— 这就是重叠行数
-        val overlap = prevH - topInPrev
-        // 重叠太少说明基本没重合（可能是页面跳变了）；太多说明滑得太近，收益低
+        val overlap = prevH - median
         if (overlap < 40 || overlap > prevH - 10) return 0
         return overlap
     }
@@ -688,45 +736,6 @@ object ScrollCapture {
             y += 2   // 隔行采样：判定用不着逐行，快一倍
         }
         return if (n == 0) 0.0 else sum / n
-    }
-
-    /**
-     * 这一帧相对上一帧，**内容有没有真的往上走**？
-     *
-     * 判据就一条：能不能在「上一帧」里找到「这一帧的顶部」。
-     *   · 真滚动了   → 一定有重叠区，[findOverlap] 返回 > 0
-     *   · 没滚动     → 重叠 = 整屏，而 [findOverlap] 内部已经把「重叠太多」归零了
-     *   · 页面跳变了 → 完全找不到，同样返回 0
-     *
-     * ★★ v1.3 新增：专门用来对付「到底之后的 overscroll 动画」——
-     *    那种情况下页面被拉伸着，**整帧色差一直偏大**，但内容其实一步没动。
-     *    只靠色差判据会一路抓到底，还把这些重复帧塞进 frames 把拼接搞崩。
-     *
-     * ⚠️ 出错时返回 true（当作"能滚"）—— 宁可多抓一帧，
-     *    也别因为一次算法异常就把长截图卡死在第二帧。
-     *
-     * ⚠️ 这个判据比色差贵（要 getPixels 两帧 + 扫一遍），
-     *    所以调用点做了短路：**只在色差判定「有变化」之后才来问它**。
-     */
-    private fun hasRealScroll(prev: Bitmap, cur: Bitmap): Boolean {
-        if (prev.width != cur.width || prev.height != cur.height) return true
-        val w = prev.width
-        return runCatching {
-            val prevPx = IntArray(w * prev.height)
-            val curPx = IntArray(w * cur.height)
-            prev.getPixels(prevPx, 0, w, 0, 0, w, prev.height)
-            cur.getPixels(curPx, 0, w, 0, 0, w, cur.height)
-            if (findOverlap(prevPx, prev.height, curPx, cur.height, w) > 0) {
-                true
-            } else {
-                // ★★ v1.8 保险：匹配不到 ≠ 没滚 —— **位移超出指纹回看范围**时也匹配不到
-                //   （手势 + fling 惯性的总位移 > 75% 屏高时，新帧中段的内容在旧帧里根本不存在）。
-                //   第二判据：只比「中段 30%~70%」的色差 ——
-                //   真滚了中段一定大变；overscroll 拉伸主要发生在边缘，中段色差很小不会误判。
-                //   阈值 15 比整帧判定的 6 高，双重防误判。
-                regionDiff(prevPx, curPx, w, prev.height, 0.30f, 0.70f) > 15.0
-            }
-        }.getOrDefault(true)
     }
 
     /**

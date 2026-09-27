@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  ★ 长截图实时预览窗（v1.9）—— 对齐系统长截图的体验
+
+  「有一只手在后台翻页，前头有个东西给你看」：
+  每截一屏，拼接结果就等比缩进这个窗里 —— 预览图长一截、窗整体窄一截。
+  用户能实时看到截到了什么，截漏了当场就知道。
+
+  窗口尺寸由代码动态设（宽 = 高 × 长图宽高比），布局里只给初始值。
+
+  ⚠️ 窗口必须 NOT_TOUCHABLE（代码里已设）—— 预览只给人看，
+     绝不能吃触摸（陷阱 ㊷ 的教训：窗口盖到哪里，手势就在哪里被吃掉）。
+  ============================================================================
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="64dp"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_scroll_preview">
+
+    <ImageView
+        android:id="@+id/ivScrollPreview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter" />
+</FrameLayout>

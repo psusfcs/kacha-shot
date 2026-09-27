@@ -227,6 +227,7 @@ class FloatBallService : Service() {
         scrollCancelled = true
         runCatching { hideScrollGuard() }
         runCatching { hideOverlayTip() }
+        runCatching { hideScrollPreview() }
         runCatching { ballView?.let { wm.removeView(it) } }
         ballView = null
         ballParams = null
@@ -732,6 +733,13 @@ class FloatBallService : Service() {
                             }
                         }
 
+                        // ★ v1.9：实时预览 —— 每截一屏，右侧悬浮窗「长一截」
+                        override fun onPreview(snapshot: Bitmap, visibleH: Int) {
+                            mainHandler.post {
+                                runCatching { showScrollPreview(snapshot, visibleH) }
+                            }
+                        }
+
                         override fun onLog(message: String) {
                             Log.d(TAG, "scroll: $message")
                         }
@@ -976,6 +984,8 @@ class FloatBallService : Service() {
         runCatching { wm.removeViewImmediate(v) }
         guardView = null
         guardParams = null
+        // ★ v1.9：长截图收尾时预览窗一并收掉
+        hideScrollPreview()
     }
 
     private fun updateGuardText(text: String) {
@@ -994,19 +1004,33 @@ class FloatBallService : Service() {
      * ⚠️ 这个函数在**后台线程**被 ScrollCapture 反复调用，
      *    里面靠 latch 同步等主线程拍完。超时 6 秒当作没拍到（返回 null）。
      */
+    /**
+     * 后台线程调：摘浮层 → 等 300ms → 拍一张 → 重挂浮层，整段同步等完。
+     *
+     * ★★ v1.9 修的真 bug（用户实测：拼出来的长图里嵌着两条「正在自动截屏…」浮层）：
+     *   原来摘完**立刻**拍 —— removeViewImmediate 只是让视图树立刻不画，
+     *   系统合成器（SurfaceFlinger）要**下一帧**才真正不显示它；
+     *   这中间拍到的图，浮层全都嵌进去了，挡住内容还很难看。
+     *   修法：摘掉后**等 300ms** 再拍（单屏截图流程一直是这么做的，别再踩一遍）。
+     *   ★ 摘的也不只是底部条 —— 提示条、预览窗，拍摄期间**全部摘掉**。
+     */
     private fun captureOnceBlocking(acc: ShotAccessibilityService): Bitmap? {
         val latch = CountDownLatch(1)
         var shot: Bitmap? = null
+        // 先在主线程把所有浮层摘掉（同步移除视图）
+        mainHandler.post { detachOverlaysForShot() }
+        // 等系统合成器刷新一帧，确保画面里已经没有浮层
+        runCatching { Thread.sleep(OVERLAY_HIDE_WAIT_MS) }
+
         mainHandler.post {
-            val guardBack = detachGuardForShot()
             runCatching {
                 acc.capture { bmp ->
-                    if (guardBack) reattachGuardAfterShot()
+                    reattachOverlaysAfterShot()
                     shot = bmp
                     latch.countDown()
                 }
             }.onFailure {
-                if (guardBack) reattachGuardAfterShot()
+                reattachOverlaysAfterShot()
                 latch.countDown()
             }
         }
@@ -1017,16 +1041,25 @@ class FloatBallService : Service() {
         }
     }
 
-    private fun detachGuardForShot(): Boolean {
-        val v = guardView ?: return false
-        runCatching { wm.removeViewImmediate(v) }
-        return true
+    /** 拍摄前把所有会出现在画面里的悬浮窗摘掉（底部条 / 提示条 / 预览窗） */
+    private fun detachOverlaysForShot() {
+        runCatching { guardView?.let { wm.removeViewImmediate(it) } }
+        runCatching { tipView?.let { if (it.parent != null) wm.removeViewImmediate(it) } }
+        runCatching { previewView?.let { if (it.parent != null) wm.removeViewImmediate(it) } }
     }
 
-    private fun reattachGuardAfterShot() {
-        val v = guardView ?: return
-        val p = guardParams ?: return
-        runCatching { if (v.parent == null) wm.addView(v, p) }
+    /** 拍完把底部条和预览窗挂回去（提示条是瞬时的，由自己的定时器收尾） */
+    private fun reattachOverlaysAfterShot() {
+        runCatching {
+            val v = guardView
+            val p = guardParams
+            if (v != null && p != null && v.parent == null) wm.addView(v, p)
+        }
+        runCatching {
+            val v = previewView
+            val p = previewParams
+            if (v != null && p != null && v.parent == null) wm.addView(v, p)
+        }
     }
 
     // ==================== 无障碍可用性 ====================
@@ -1073,6 +1106,16 @@ class FloatBallService : Service() {
     private var tipParams: WindowManager.LayoutParams? = null
     private val hideTipRunnable = Runnable { hideOverlayTip() }
 
+    // ==================== 长截图实时预览窗（v1.9）====================
+
+    /**
+     * 预览窗的 view / 参数。
+     * 对齐系统长截图的体验（用户原话）：「有一只手在后台翻页，前头有个东西给你看」——
+     * 每截一屏，预览图等比长一截；长图越长，窗整体越窄。
+     */
+    private var previewView: View? = null
+    private var previewParams: WindowManager.LayoutParams? = null
+
     /**
      * 在屏幕上浮一条小提示，2.8 秒后自己消失。
      *
@@ -1116,6 +1159,68 @@ class FloatBallService : Service() {
 
     private fun hideOverlayTip() {
         val v = tipView ?: return
+        runCatching { if (v.parent != null) wm.removeViewImmediate(v) }
+    }
+
+    /**
+     * 显示 / 更新右侧的等比预览窗。
+     *
+     * ── 交互模型（对齐系统长截图）──
+     *   窗**高度固定**（约 42% 屏高），**宽度 = 高度 × 长图宽高比** ——
+     *   所以长图越截越长，窗整体越缩越窄（用户观察到的系统行为）。
+     *   位置：右侧垂直居中、**不贴边**（留 10dp），方便看也方便避开手指。
+     *
+     * ── 性能 ──
+     *   每帧一次 createScaledBitmap（小图，几毫秒），在「等页面静止」的空闲里做，
+     *   不跟滚动抢资源。
+     *
+     * ⚠️ 窗口必须 NOT_TOUCHABLE（预览不需要交互，别再变成吃触摸的窗口）。
+     * ⚠️ [snapshot] 是 ScrollCapture 内部画布的本体 —— 只读，绝不 recycle。
+     */
+    private fun showScrollPreview(snapshot: Bitmap, visibleH: Int) {
+        if (visibleH <= 0 || snapshot.isRecycled) return
+        mainHandler.post {
+            runCatching {
+                val screen = screenSize()
+                val winH = (screen.y * 0.42f).toInt()
+                val winW = (winH.toFloat() * snapshot.width / visibleH)
+                    .toInt().coerceIn(dp(26), dp(120))
+
+                val v = previewView ?: LayoutInflater.from(this)
+                    .inflate(R.layout.view_scroll_preview, null)
+                    .also { previewView = it }
+
+                // 先裁出已拼接部分，再等比缩到窗口尺寸
+                val src = if (visibleH == snapshot.height) snapshot
+                else Bitmap.createBitmap(snapshot, 0, 0, snapshot.width, visibleH)
+                val thumb = Bitmap.createScaledBitmap(src, winW, winH, true)
+                if (thumb !== src) runCatching { if (!src.isRecycled && src !== snapshot) src.recycle() }
+
+                v.findViewById<android.widget.ImageView>(R.id.ivScrollPreview)?.setImageBitmap(thumb)
+
+                if (v.parent == null) {
+                    val p = WindowManager.LayoutParams(
+                        winW, winH,
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                        PixelFormat.TRANSLUCENT
+                    ).apply {
+                        gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                        x = dp(10)
+                    }
+                    previewParams = p
+                    wm.addView(v, p)
+                } else {
+                    previewParams?.width = winW
+                    runCatching { wm.updateViewLayout(v, previewParams) }
+                }
+            }
+        }
+    }
+
+    private fun hideScrollPreview() {
+        val v = previewView ?: return
         runCatching { if (v.parent != null) wm.removeViewImmediate(v) }
     }
 
