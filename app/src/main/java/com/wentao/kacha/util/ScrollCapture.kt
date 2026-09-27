@@ -292,7 +292,7 @@ object ScrollCapture {
                     0f, overlap.toFloat(),
                     0f, accH.toFloat(),
                     bmp.width.toFloat(), newRows.toFloat(),
-                    true, null
+                    true, null as Paint?
                 )
                 runCatching { if (acc !== bigger && !acc.isRecycled) acc.recycle() }
                 acc = bigger
@@ -346,7 +346,8 @@ object ScrollCapture {
         val okCount = frames.size
         frames.forEach { if (!it.isRecycled) it.recycle() }
         listener?.onLog("拼好了：${stitched.width}×${stitched.height}（$okCount 屏）")
-        Result.Ok(stitched, okCount)
+        // ⚠️ 块函数体最后一句不会自动成为返回值 —— 必须 return（v2.0 云编译踩过）
+        return Result.Ok(stitched, okCount)
     }
 
     /**
