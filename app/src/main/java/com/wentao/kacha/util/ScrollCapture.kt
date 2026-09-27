@@ -282,6 +282,9 @@ object ScrollCapture {
             }
 
             // 增量绘制：cur 从 overlap 行往下的都是新内容，追加到画布底部
+            // ⚠️ 用 Rect 版 drawBitmap —— 9 参数浮点版在这个上下文里重载解析失败
+            //   （null 的 Paint 参数在多个重载间歧义，云编译真实报错；stitch 里
+            //    的 Rect 版一直没问题，用同一签名最稳）
             val newRows = bmp.height - overlap
             if (newRows > 0 && accH + newRows <= MAX_RESULT_ROWS) {
                 val bigger = Bitmap.createBitmap(bmp.width, accH + newRows, Bitmap.Config.ARGB_8888)
@@ -289,10 +292,9 @@ object ScrollCapture {
                 c.drawBitmap(acc, 0f, 0f, null)
                 c.drawBitmap(
                     bmp,
-                    0f, overlap.toFloat(),
-                    0f, accH.toFloat(),
-                    bmp.width.toFloat(), newRows.toFloat(),
-                    true, null as Paint?
+                    Rect(0, overlap, bmp.width, bmp.height),
+                    Rect(0, accH, bmp.width, accH + newRows),
+                    Paint(Paint.FILTER_BITMAP_FLAG)
                 )
                 runCatching { if (acc !== bigger && !acc.isRecycled) acc.recycle() }
                 acc = bigger
