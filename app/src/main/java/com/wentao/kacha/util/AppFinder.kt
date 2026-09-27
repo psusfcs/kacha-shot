@@ -181,14 +181,20 @@ object AppFinder {
         return runCatching {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = mime
-                // ⚠️ 必须加 CATEGORY_DEFAULT，否则很多 App 的接收 Activity
-                //    （在 manifest 里没写明 category 的）查不出来，结果就是列表空空的。
                 addCategory(Intent.CATEGORY_DEFAULT)
             }
-            context.packageManager.queryIntentActivities(
-                intent,
-                PackageManager.MATCH_DEFAULT_ONLY
-            )
+            // ★★ 这里**绝不能带 PackageManager.MATCH_DEFAULT_ONLY**（v1.5 修的真 bug）。
+            //
+            //   那个 flag 只保留「组件自己显式声明了 CATEGORY_DEFAULT」的接收者。
+            //   而微信的**主分享入口（发聊天）恰好没声明 DEFAULT**，
+            //   声明了 DEFAULT 的反倒是「朋友圈」「发送到微信状态」这些副入口 ——
+            //   于是列表里出现了「发送到微信状态」，**却没有「微信」**。
+            //   （用户实测原话：「连朋友圈都有为什么没有微信」——就是这儿。）
+            //
+            //   系统自己的分享面板（chooser）就不带这个 flag，所以它列得全。我们也不带：
+            //   **宁多列、别漏**。真发的时候还有 Exporter.shareToApp 的 setPackage 直达
+            //   + 通用分享兜底，多列几个候选不会出问题，漏掉才是问题。
+            context.packageManager.queryIntentActivities(intent, 0)
         }.onFailure { Log.w(TAG, "查询可分享应用失败（$mime）：${it.message}") }
             .getOrDefault(emptyList())
     }
@@ -205,10 +211,9 @@ object AppFinder {
                 setPackage(pkg)
                 addCategory(Intent.CATEGORY_DEFAULT)
             }
-            context.packageManager.queryIntentActivities(
-                intent,
-                PackageManager.MATCH_DEFAULT_ONLY
-            ).isNotEmpty()
+            // ⚠️ 同样**不带** MATCH_DEFAULT_ONLY —— 理由见 querySenders 的注释：
+            //    微信的主分享入口没声明 CATEGORY_DEFAULT，带了它会被误判成「这个 App 不能收图」。
+            context.packageManager.queryIntentActivities(intent, 0).isNotEmpty()
         }.getOrDefault(false)
     }
 

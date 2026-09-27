@@ -52,6 +52,22 @@ object ScrollCapture {
     /** 相似度阈值：平均色差小于这个值才算「匹配上」 */
     private const val MATCH_TOLERANCE = 12.0
 
+    /**
+     * 找重叠时，指纹取在画面的**百分之几处**（0.25 = 四分之一高度处）。
+     *
+     * ★★ 为什么不取顶部（0）—— v1.5 修的真 bug，用户实测「长图永远拼不上」：
+     *    很多页面的顶部是**吸顶栏**（微信聊天顶上的标题栏就是）。
+     *    滚动之后，新帧的顶部**还是那一模一样的标题栏** ——
+     *    拿它去旧帧里找，必然在旧帧的**第 0 行附近**匹配上，于是算出
+     *    「重叠 = 整屏」→ 判成「没滚动」/「找不到可靠匹配」→ 整套拼接作废。
+     *    换成中段就骗不了了：中段内容是真的滚过去了的,
+     *    它在旧帧里的位置就代表「这一屏往上走了多少」。
+     *
+     * ★ 为什么是 0.25（不是 0.5）：还要给「指纹位置 + 滚动距离」留出余量。
+     *    默认每屏滚 70% 屏高，指纹 0.25 + 滚动 0.7 = 0.95，刚好落在扫描范围内。
+     */
+    private const val PROBE_RATIO = 0.25f
+
     /** 「这帧和上帧几乎一样」的判定阈值（用来判断到底了） */
     private const val STILL_TOLERANCE = 6.0
 
@@ -494,7 +510,12 @@ object ScrollCapture {
     }
 
     /**
-     * 在 prev 里找 cur 顶部那几行出现在哪一行。
+     * 在 prev 里找 cur 里某一小段内容出现在哪一行。
+     *
+     * ★★ v1.5 关键修正：指纹**不再取 cur 的顶部**，改取**中段**（见 [PROBE_RATIO]）。
+     *    原因：顶部常被**吸顶栏**占着，滚动后它原封不动，
+     *    拿它去找必然在 prev 顶部匹配到 → 算出「重叠=整屏」→ 直接判失败。
+     *    这就是用户实测「长图永远拼不上、永远只给一屏」的真凶。
      *
      * @return 重叠行数（cur 顶部有 overlap 行和 prev 底部重复）；
      *         0 表示没找到可靠匹配（宁可不拼）
@@ -510,13 +531,16 @@ object ScrollCapture {
         // 自适应步长：页面越高，扫描步长越大，保证耗时可控
         val step = (prevH / 260).coerceAtLeast(1)
 
+        // ★ 指纹位置：cur 的中段（避开顶部吸顶栏，也不碰最底下）
+        val probeRow = (curH * PROBE_RATIO).toInt().coerceIn(1, curH - rows - 1)
+
         var bestRow = -1
         var bestScore = Double.MAX_VALUE
 
         // 从 prev 的第 1 行开始扫（第 0 行是上一屏的顶，通常是状态栏，干扰大）
         var r = 1
         while (r <= prevH - rows - 1) {
-            val score = rowBlockDiff(prevPx, prevH, r, curPx, 0, rows, width)
+            val score = rowBlockDiff(prevPx, prevH, r, curPx, probeRow, rows, width)
             if (score < bestScore) {
                 bestScore = score
                 bestRow = r
@@ -526,9 +550,16 @@ object ScrollCapture {
 
         if (bestRow < 0 || bestScore > MATCH_TOLERANCE) return 0
 
-        // bestRow 是「cur 顶行在 prev 里的位置」。
-        // 那么 prev 底部有 (prevH - bestRow) 行跟 cur 顶部重复 —— 这就是重叠行数。
-        val overlap = prevH - bestRow
+        // bestRow = 「cur 的 probeRow 那一行」在 prev 里的位置。
+        // 那么 cur 的**第 0 行**在 prev 里位于 (bestRow - probeRow)。
+        val topInPrev = bestRow - probeRow
+        if (topInPrev <= 0) {
+            // cur 第 0 行落在 prev 顶部或之上 → 几乎没滚动（或者往上跑了），别拼
+            return 0
+        }
+
+        // prev 从 topInPrev 往下的部分，跟 cur 的开头是重复的 —— 这就是重叠行数
+        val overlap = prevH - topInPrev
         // 重叠太少说明基本没重合（可能是页面跳变了）；太多说明滑得太近，收益低
         if (overlap < 40 || overlap > prevH - 10) return 0
         return overlap
