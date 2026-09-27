@@ -90,6 +90,15 @@ class CropActivity : AppCompatActivity() {
         b = ActivityCropBinding.inflate(layoutInflater)
         setContentView(b.root)
 
+        // ★★ v2.0：targetSdk 35+ 强制 edge-to-edge，布局里的 fitsSystemWindows
+        //   **不再自动避让状态栏** —— 工具栏会被顶进电池区（用户实测）。
+        //   必须代码级把系统栏高度转成页面内边距。
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(b.root) { v, insets ->
+            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+
         val bitmap = CropBus.take()
         if (bitmap == null || bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) {
             // 拿不到图（进程被杀过 / 被别处清掉了）→ 直接退，别让用户对着空页面发愣

@@ -196,6 +196,8 @@ object ScrollCapture {
         //   不然他只能看到一句「滑不动」，没法反馈到底是哪种情况。
         var swipeAttempts = 0
         var swipeFailures = 0
+        // ★ v2.0：最后一帧的判定数据（共识/中段色差）—— 失败时上浮层，用户发来即可精准定位
+        var lastDiag = ""
 
         // ② 一屏一屏往下滑
         for (i in 2..maxFrames) {
@@ -254,9 +256,10 @@ object ScrollCapture {
             bmp.getPixels(curPx, 0, bmp.width, 0, 0, bmp.width, bmp.height)
 
             val overlap = findOverlap(prevPx, prevH2, curPx, bmp.height, bmp.width)
+            val midDiff = regionDiff(prevPx, curPx, bmp.width, prevH2, 0.30f, 0.70f)
             // 判「有滚动」：整帧色差 + （三带共识对上 或 中段色差大 —— v1.8 双保险保留）
-            val scrolled = diff >= STILL_TOLERANCE &&
-                (overlap > 0 || regionDiff(prevPx, curPx, bmp.width, prevH2, 0.30f, 0.70f) > 15.0)
+            val scrolled = diff >= STILL_TOLERANCE && (overlap > 0 || midDiff > 15.0)
+            lastDiag = "对齐" + (if (overlap > 0) "成" else "败") + "·中段色差" + "%.1f".format(midDiff)
 
             if (!scrolled) {
                 stillCount++
@@ -319,18 +322,20 @@ object ScrollCapture {
         // ★ v4.1 只截到 1 屏：说明页面根本没滚动
         if (frames.size < 2) {
             frames.forEach { if (!it.isRecycled) it.recycle() }
-            // ★ v1.6：把「滑了几次、滑没滑成」说清楚 —— 两种失败的根源完全不同：
-            //   · 滑动本身失败（swipeFailures > 0）→ 系统没执行手势（权限 / 系统层问题）
-            //   · 滑动成功但画面没变 → 页面真的不能滚，或者已经在底部
-            //   用户看到数字才能准确反馈，我们才能对症下药。
+            // ★ v1.6：把「滑了几次、滑没滑成」说清楚；★ v2.0 再带上判定数据
+            //   （对齐成败 + 中段色差）—— 用户把浮层那句话发回来，
+            //   我们立刻能定位是「滑动没执行」还是「对齐算法还有洞」。
             val why = if (swipeFailures > 0)
                 "系统没有执行滑动（试了 $swipeAttempts 次）"
             else
-                "滑了 $swipeAttempts 次、画面都没变化"
+                "滑了 $swipeAttempts 次（$lastDiag）"
+            // ★ v2.0：把已抓到的部分**真的**交出去 ——
+            //   原代码文案说「先给你这一屏」，partial 却传 null，名不副实。
+            val partial = acc
             return Result.Fail(
                 "长截图没成：$why。这个页面可能不支持滚动，或者已经在底部。" +
-                    "先给你这一屏。",
-                null
+                    "先给你已截到的部分。",
+                partial
             )
         }
 

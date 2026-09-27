@@ -1017,8 +1017,17 @@ class FloatBallService : Service() {
     private fun captureOnceBlocking(acc: ShotAccessibilityService): Bitmap? {
         val latch = CountDownLatch(1)
         var shot: Bitmap? = null
-        // 先在主线程把所有浮层摘掉（同步移除视图）
-        mainHandler.post { detachOverlaysForShot() }
+        // ★★ v2.0：摘浮层必须**等主线程真正执行完**再继续 ——
+        //   原来只是 post 进主线程队列就往下走，而预览窗每帧都在往主线程塞
+        //   addView/updateViewLayout 重活，detach 的任务常被挤到「拍照」之后
+        //   才执行 → 拍到的画面里浮层还在（用户实测 v1.9 长图里仍嵌着提示框）。
+        //   用 latch 同步：确认摘除动作在主线程跑完了，再等合成器刷新，再拍。
+        val detached = CountDownLatch(1)
+        mainHandler.post {
+            detachOverlaysForShot()
+            detached.countDown()
+        }
+        runCatching { detached.await(1, TimeUnit.SECONDS) }
         // 等系统合成器刷新一帧，确保画面里已经没有浮层
         runCatching { Thread.sleep(OVERLAY_HIDE_WAIT_MS) }
 
