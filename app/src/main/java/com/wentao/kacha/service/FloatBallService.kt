@@ -607,19 +607,29 @@ class FloatBallService : Service() {
      *
      * 用户定案：「长按球 = 自动滚动截长图」，全程无感，到底了自己停。
      *
-     * ⚠️ 无障碍实例不在时**什么都不做**（只 log）——
-     *    长截图没法像单屏那样"叫醒后再来一次"（滚动流程跑在后台线程，
-     *    叫醒是异步的，等它上来时这次长按的上下文早没了）。
-     *    宁可让球弹回去（用户一看就知道没成），也不要做半个半截的动作。
+     * ⚠️ 无障碍实例不在时**先叫一次醒**（跟单屏截图同款逻辑）：
+     *    用户很可能刚在系统设置里勾上无障碍，而系统 bind 服务是异步的，
+     *    这一刻 instance 还是 null —— 不叫醒的话用户看到的是「长按没反应」，
+     *    以为坏了又去点一次。
+     *    唤醒期间**球留在屏幕上不动**（不 detach）：要等 1~3 秒，
+     *    球还在用户才知道程序没死；等真开滚了 startAutoCapture 里再摘球。
      */
     private fun doScrollShot() {
         val acc = ShotAccessibilityService.instance
-        if (acc == null) {
-            Log.w(TAG, "长截图需要无障碍服务，但实例不在")
-            noteAccessibilityBroken()
+        if (acc != null) {
+            startAutoCapture(acc)
             return
         }
-        startAutoCapture(acc)
+        Log.w(TAG, "长截图：无障碍实例不在，尝试叫醒")
+        ShotAccessibilityService.tryRevive(this) { ok ->
+            val revived = ShotAccessibilityService.instance
+            if (ok && revived != null) {
+                mainHandler.post { runCatching { startAutoCapture(revived) } }
+            } else {
+                Log.w(TAG, "长截图：无障碍叫不醒，放弃")
+                noteAccessibilityBroken()
+            }
+        }
     }
 
     // ==================== 自动滚动 ====================

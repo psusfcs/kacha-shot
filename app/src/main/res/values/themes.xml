@@ -40,6 +40,35 @@
         <item name="android:windowDisablePreview">true</item>
     </style>
 
+    <!--
+      ★ 底部弹层专用主题（「选目标 App」的 Dialog 用它）
+
+      ⚠️⚠️ 为什么必须给 Dialog 单独一个主题 —— v1.0 点「添加应用」秒退的真凶在这：
+        ① `Dialog(context)` 默认继承 **Activity 的主题**（Theme.Kacha），
+           而 Activity 主题的 `windowIsFloating` 是 false →
+           Dialog 会退化成「全屏窗口」，dim、点击外部关闭、布局都不对。
+        ② 更要命：全屏窗口下想隐藏标题栏只能调
+           `dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)`，
+           而这个方法**必须在 setContentView() 之前**调用，写在后面直接抛
+           `AndroidRuntimeException: requestFeature() must be called before adding content`
+           —— 用户看到的就是「点一下秒退」。
+
+      → 解法：把「浮动 + 无标题 + 透明底 + dim」全套写进主题，
+        代码里一次都不碰 requestWindowFeature，从根上没这个机会犯错。
+
+      ⚠️ parent 用 Theme.Kacha（不是 Material 的 Dialog 主题）：
+         少引一个不确定存在的外部 parent，避免 AAPT failed linking references（陷阱 ⑬）。
+    -->
+    <style name="Theme.Kacha.Sheet" parent="Theme.Kacha">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimAmount">0.45</item>
+        <!-- 弹层要通栏，别被浮动窗口的最小宽度特性卡住 -->
+        <item name="android:windowMinWidthMajor">100%</item>
+        <item name="android:windowMinWidthMinor">100%</item>
+    </style>
+
     <!-- ==================== 文字 ==================== -->
     <style name="KachaText" parent="Widget.AppCompat.TextView">
         <item name="android:textColor">@color/text_primary</item>

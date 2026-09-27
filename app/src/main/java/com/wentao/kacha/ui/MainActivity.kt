@@ -13,10 +13,10 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.Window
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -93,10 +93,24 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
+        // ★ 补拉悬浮球。
+        //   用户「开球的意图」还在（ballEnabled=true）但服务没跑 —— 最常见的原因是
+        //   去系统设置开无障碍那段时间里，App 退到后台被 ROM 回收了进程：
+        //   服务没了、球也没了，可用户以为自己早就开好了。
+        //   不补拉的话，用户回来只看到「球不见了 + 状态显示没启动」，以为坏了。
+        if (prefs.ballEnabled && !FloatBallService.isRunning) {
+            FloatBallService.requestStart(this)
+        }
+
         // ★ 状态一定要在这里刷 —— 用户从系统设置页回来只有 onResume 会走
         refreshStatus()
         refreshTargets()
         refreshSwitches()
+
+        // 服务是异步起来的（startForegroundService → onCreate 要走一整套），
+        // 立刻刷还会是「没启动」，稍后再刷一次才准。
+        b.root.postDelayed({ runCatching { refreshStatus() } }, 500)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -153,6 +167,14 @@ class MainActivity : AppCompatActivity() {
      *
      * ⚠️ 图标切换要显式换 src —— 别指望 drawable 自己变色，
      *    我们用的是两张完全不同的图（ic_check 绿勾 / ic_warn 黄感叹号）。
+     *
+     * ⚠️⚠️ 「截屏权限」为什么判 isEnabledInSystem 而**不是** isAlive（v1.0 用户反馈的真凶）：
+     *    isAlive 的第一行是 `instance ?: return false` —— 服务实例还没连上时直接返回 false，
+     *    **压根没去问系统**。而用户开完无障碍切回 App 那一刻，系统 bind 服务是异步的，
+     *    instance 经常还是 null → 首页就显示「没开」，可系统里明明已经勾上了。
+     *    另外 isAlive 的语义是「现在能不能立刻截图」（内部用的），
+     *    跟界面上要表达的「这步权限你做了没有」不是一回事。
+     *    用户能控制的只有「系统里勾没勾」，所以这里就照实显示这个。
      */
     private fun refreshStatus() {
         val overlayOk = Settings.canDrawOverlays(this)
@@ -160,7 +182,7 @@ class MainActivity : AppCompatActivity() {
         b.tvOverlayState.text = getString(if (overlayOk) R.string.status_overlay_on else R.string.status_overlay_off)
         b.btnOverlay.visibility = if (overlayOk) View.GONE else View.VISIBLE
 
-        val accOk = ShotAccessibilityService.isAlive(this)
+        val accOk = ShotAccessibilityService.isEnabledInSystem(this)
         b.ivAccState.setImageResource(if (accOk) R.drawable.ic_check else R.drawable.ic_warn)
         b.tvAccState.text = getString(if (accOk) R.string.status_acc_on else R.string.status_acc_off)
         b.btnAcc.visibility = if (accOk) View.GONE else View.VISIBLE
@@ -191,7 +213,9 @@ class MainActivity : AppCompatActivity() {
 
     /** 跳到系统无障碍设置页，并用高亮把我们的服务标出来 */
     private fun openAccessibilitySettings() {
-        if (ShotAccessibilityService.isAlive(this)) {
+        // 判据跟状态行保持一致（见 refreshStatus 的说明）：
+        // 系统里勾了就算「已开」，不必再跳一次设置页
+        if (ShotAccessibilityService.isEnabledInSystem(this)) {
             toast(getString(R.string.status_acc_on))
             return
         }
@@ -288,22 +312,27 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val dialog = Dialog(this)
+        // ⚠️⚠️ 这里踩过真事故（v1.0 点「添加应用」秒退），三条铁律：
+        //   ① **绝不调 dialog.requestWindowFeature(...)** ——
+        //      它必须在 setContentView() **之前**调用，写在后面会抛
+        //      AndroidRuntimeException: requestFeature() must be called before adding content。
+        //      「无标题」已经写进 Theme.Kacha.Sheet，代码里碰都不碰它。
+        //   ② Dialog 必须吃 Theme.Kacha.Sheet 主题 —— 默认继承 Activity 主题时
+        //      windowIsFloating=false，弹层会退化成全屏窗口（dim / 布局全不对）。
+        //   ③ window 的尺寸 / 位置 / dim 放在 show() **之后**设最稳
+        //      （show 会重放一次 window attributes，提前设可能被覆盖）。
+        val dialog = Dialog(this, R.style.Theme_Kacha_Sheet)
         val content = LayoutInflater.from(this).inflate(R.layout.sheet_pick_app, null)
         dialog.setContentView(content)
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        dialog.window?.apply {
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            val lp = attributes
-            lp.width = ViewGroup.LayoutParams.MATCH_PARENT
-            lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
-            lp.gravity = Gravity.BOTTOM
-            attributes = lp
-            // 底部弹层别把状态栏也涂黑
-            setDimAmount(0.45f)
-        }
 
         val box = content.findViewById<LinearLayout>(R.id.boxPicker)
+        val sv = content.findViewById<ScrollView>(R.id.svPicker)
+
+        // 列表最高占屏幕 55% —— 应用多的时候能滚，少的时候不至于撑出一大块空白。
+        // （布局里原来那个 android:maxHeight 是无效属性，ScrollView 压根没有它）
+        val limitH = (resources.displayMetrics.heightPixels * 0.55f).toInt()
+        runCatching { sv.layoutParams = sv.layoutParams.apply { height = limitH } }
+
         val already = prefs.targets.map { it.pkg }.toSet()
 
         apps.forEach { app ->
@@ -332,7 +361,31 @@ class MainActivity : AppCompatActivity() {
         }
 
         content.findViewById<View>(R.id.btnPickerCancel).setOnClickListener { dialog.dismiss() }
+
+        // 列表填完后：内容比上限矮就缩回去（不然底下留一大片空白）
+        box.post {
+            runCatching {
+                val need = box.height
+                if (need in 1 until limitH) {
+                    sv.layoutParams = sv.layoutParams.apply { height = need }
+                }
+            }
+        }
+
         dialog.show()
+
+        // ★ 尺寸 / 位置 / dim 一律放 show() 之后 —— 此时 window 已 attached，设了立刻生效
+        runCatching {
+            dialog.window?.apply {
+                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                val lp = attributes
+                lp.width = ViewGroup.LayoutParams.MATCH_PARENT
+                lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                lp.gravity = Gravity.BOTTOM
+                attributes = lp
+                setDimAmount(0.45f)
+            }
+        }
     }
 
     // ==================== ③ 动作开关区 ====================

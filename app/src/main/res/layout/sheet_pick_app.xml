@@ -32,12 +32,18 @@
         android:text="@string/target_pick_sub"
         style="@style/KachaRowSub" />
 
+    <!--
+      ⚠️ 关于高度：ScrollView **没有 maxHeight 这个属性**（那是 ImageView/ProgressBar 的），
+         写在这里会被静默忽略 —— 之前就写了 `android:maxHeight="420dp"`，等于没写。
+         真正的高度限制在代码里做（MainActivity.showAppPicker 按屏幕 55% 动态设）。
+         weight=1 保留：让它在「内容不够高」时也不至于塌成 0。
+    -->
     <ScrollView
+        android:id="@+id/svPicker"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginTop="14dp"
         android:layout_weight="1"
-        android:maxHeight="420dp"
         android:scrollbars="none">
 
         <LinearLayout

@@ -184,7 +184,12 @@ class ShotAccessibilityService : AccessibilityService() {
                     AccessibilityServiceInfo.FEEDBACK_ALL_MASK
                 ).any { info -> (info.id ?: "").contains(context.packageName) }
             }.getOrDefault(false)
-            if (!alive && inst === instance) {
+            // ⚠️ 只有在「系统里确实没勾」时才把骗人的实例清掉。
+            //    原来是无条件清 —— 万一某个 ROM 的 getEnabledAccessibilityServiceList
+            //    返回不准（这事有先例），会把**本来能用**的实例误杀，
+            //    之后连截图都做不了。「真活被当成假活杀掉」比假活还糟。
+            //    所以先拿系统设置兜一层：设置里明明勾着，就别动实例。
+            if (!alive && !isEnabledInSystem(context) && inst === instance) {
                 instance = null
             }
             return alive
