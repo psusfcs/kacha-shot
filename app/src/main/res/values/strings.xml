@@ -110,6 +110,7 @@
     <string name="crop_cancel">取消</string>
     <string name="crop_done">完成</string>
     <string name="crop_hint">拖动上下两端，裁掉不要的部分（只能裁上下）</string>
+    <string name="crop_hint_partial">长图没拼成，这是其中一屏；可以裁一下再发</string>
     <string name="crop_no_image">没有要裁剪的图片</string>
     <string name="crop_failed">裁剪失败了，换张短的试试</string>
 </resources>

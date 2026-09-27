@@ -178,14 +178,26 @@ object ScrollCapture {
 
             val bmp = captureFn() ?: break
 
-            // 跟上一帧比：几乎一样 = 到底了
+            // ── 判断「这一帧有没有带来新内容」──────────────────────────
+            // ★★ v1.3 修的真 bug（用户实测：「早翻到最底了，页面都没了，它还在计数」）：
+            //    原来只看**整帧色差** —— 到底之后页面虽然不滚了，但滑动会触发
+            //    overscroll（拉伸/回弹）动画，整帧色差**一直偏大**，
+            //    `diff < STILL_TOLERANCE` 永远不成立 → 一路抓到底（直到帧数上限）。
+            //    更糟的是：这些重复帧会被加进 frames，导致后面拼接找不到重叠
+            //    → 整张长图作废 → 用户最后只拿到一屏。
+            //
+            //    改成看「**内容有没有真的位移**」（能不能在上一帧里找到这一帧的顶部）：
+            //    这个判据不会骗人 —— 真滚了，就一定有重叠；没滚，重叠就是整屏。
+            //    （findOverlap 内部已经把「重叠太多」归零了，所以 > 0 就是真滚了。）
             val diff = averageDiff(frames.last(), bmp)
-            if (diff < STILL_TOLERANCE) {
+            val scrolled = diff >= STILL_TOLERANCE && hasRealScroll(frames.last(), bmp)
+
+            if (!scrolled) {
                 stillCount++
-                listener?.onLog("第 $i 屏和第 ${i - 1} 屏几乎一样（差异 ${"%.1f".format(diff)}）")
+                listener?.onLog("第 $i 帧没有新内容（色差 ${"%.1f".format(diff)}），丢弃")
                 bmp.recycle()
                 if (stillCount >= stillFrames) {
-                    listener?.onLog("连续 $stillCount 帧没变化，判断已经到底")
+                    listener?.onLog("连续 $stillCount 帧没有新内容，判断已经到底")
                     break
                 }
                 continue
@@ -584,6 +596,36 @@ object ScrollCapture {
             y += step
         }
         return if (n == 0) 0.0 else sum / n
+    }
+
+    /**
+     * 这一帧相对上一帧，**内容有没有真的往上走**？
+     *
+     * 判据就一条：能不能在「上一帧」里找到「这一帧的顶部」。
+     *   · 真滚动了   → 一定有重叠区，[findOverlap] 返回 > 0
+     *   · 没滚动     → 重叠 = 整屏，而 [findOverlap] 内部已经把「重叠太多」归零了
+     *   · 页面跳变了 → 完全找不到，同样返回 0
+     *
+     * ★★ v1.3 新增：专门用来对付「到底之后的 overscroll 动画」——
+     *    那种情况下页面被拉伸着，**整帧色差一直偏大**，但内容其实一步没动。
+     *    只靠色差判据会一路抓到底，还把这些重复帧塞进 frames 把拼接搞崩。
+     *
+     * ⚠️ 出错时返回 true（当作"能滚"）—— 宁可多抓一帧，
+     *    也别因为一次算法异常就把长截图卡死在第二帧。
+     *
+     * ⚠️ 这个判据比色差贵（要 getPixels 两帧 + 扫一遍），
+     *    所以调用点做了短路：**只在色差判定「有变化」之后才来问它**。
+     */
+    private fun hasRealScroll(prev: Bitmap, cur: Bitmap): Boolean {
+        if (prev.width != cur.width || prev.height != cur.height) return true
+        val w = prev.width
+        return runCatching {
+            val prevPx = IntArray(w * prev.height)
+            val curPx = IntArray(w * cur.height)
+            prev.getPixels(prevPx, 0, w, 0, 0, w, prev.height)
+            cur.getPixels(curPx, 0, w, 0, 0, w, cur.height)
+            findOverlap(prevPx, prev.height, curPx, cur.height, w) > 0
+        }.getOrDefault(true)
     }
 
     /**

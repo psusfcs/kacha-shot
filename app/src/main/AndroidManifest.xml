@@ -38,15 +38,39 @@
       ★ 这条同时也是「能查到其他 App」的前提 —— Android 11+ 的包可见性机制要求：
         不在这里声明，queryIntentActivities 就**查不到**别的 App。
 
-      ⚠️⚠️ 千万别在这里加 <data android:mimeType="image/*" />（v1.2 的血泪教训）：
-         加了之后系统的包可见性过滤会变**严格** —— 只放行那些「明确声明了能收
-         image/* 」的 App。而微信这类 App 在它自己的清单里写的是更宽的
-         `*/*`，两边对不上号，系统就干脆不让我们「看见」微信
-         → 用户反馈「选择发送目标的列表里没有微信」。
-         正确做法：**只声明 action**，把范围放到最宽（凡是能接分享的都可见）；
-         真正的筛选交给代码里的 queryIntentActivities + 具体 mimeType 去做。
+      ⚠️⚠️ 这里的匹配规则非常反直觉，v1.2 踩了个来回，务必看完再改：
+
+        ① **不能只写 <action>、不写 <data>**（v1.2 就是这么写的，结果列表里
+           只剩「保存到本地 / 打印 / 蓝牙」这些系统组件，微信一个都出不来）。
+           原因：query 的 type 为 null 时，**匹配不上任何声明了 data 类型的组件** ——
+           而微信这类 App 全都声明了。所以「不写 data」不是变宽，是变窄。
+
+        ② **也不能只写一个 mimeType**（v1.1 只写了 image 通配，微信也出不来）。
+           原因：这里用的是 IntentFilter 的**精确匹配**，没有「反向通配」——
+           query 写 image 通配，匹配不上只写「所有类型」的 App。
+
+        → 唯一稳妥的写法：**把常见写法全都列一遍，多条并集**（多条之间是 OR）。
+
+      ⚠️ 真正的筛选和排序在代码里做（AppFinder）——
+         这里只要「能让系统放行我们看见它」就够了，范围宁大勿小。
     -->
     <queries>
+        <!-- ① 收图片的：微信、QQ、小红书、豆包这类都在这条 -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="image/*" />
+        </intent>
+        <!-- ② 声明了「所有类型」的 App（只写一条 mimeType 会漏掉它们） -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
+        </intent>
+        <!-- ③ 收纯文本的（有些 App 的分享入口只声明了 text） -->
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <!-- ④ 完全不限定类型的（不少系统组件是这么写的） -->
         <intent>
             <action android:name="android.intent.action.SEND" />
         </intent>

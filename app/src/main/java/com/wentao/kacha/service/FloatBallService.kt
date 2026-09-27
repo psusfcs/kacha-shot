@@ -83,6 +83,9 @@ class FloatBallService : Service() {
         /** 截图前等浮层彻底从画面里消失的时长 */
         private const val OVERLAY_HIDE_WAIT_MS = 300L
 
+        /** 单屏截图的看门狗时长：超过它还没收尾就强制把球收回来 */
+        private const val SHOT_WATCHDOG_MS = 4000L
+
         /** 供首页显示运行状态 */
         @Volatile
         var isRunning: Boolean = false
@@ -155,6 +158,24 @@ class FloatBallService : Service() {
 
     /** 单屏截图进行中（防重复触发） */
     private var capturing = false
+
+    /**
+     * 单屏截图的**看门狗**。
+     *
+     * ★ v1.3 新增。用户实测：「在桌面点悬浮球，球消失，但没有跳转应用，
+     *   我也不知道他有没有被截图下来」。
+     *   只要截图回调**一直不来**（服务被系统掐了 / takeScreenshot 静默失败等），
+     *   球就会永远回不来 —— 用户看到的就是「点一下，球没了」。
+     *   4 秒兜底：强制把球收回来，顺便抖一下告诉用户「这次没成」。
+     */
+    private val shotWatchdog = Runnable {
+        if (capturing) {
+            Log.w(TAG, "单屏截图超时没收尾，强制恢复球")
+            restoreBallAfterShot()
+            capturing = false
+            flashBallFail()
+        }
+    }
 
     private var cachedScreen: Point? = null
 
@@ -319,6 +340,15 @@ class FloatBallService : Service() {
         val view = LayoutInflater.from(this).inflate(R.layout.view_float_ball, null)
         val size = dp(prefs.ballSize)
         val screen = screenSize()
+
+        // ★ v1.3：球的位置要**记住** —— 用户挪到哪儿，下次还在哪儿。
+        //   以前每次启动都硬放在「右侧三分之一高处」，用户每次都得重新找球。
+        //   用户原话：「我把它挪到哪个位置以后，他下次打开还是在我放的那个位置」。
+        //   ⚠️ 存的是**比例**（Prefs.ballYRatio），换算时要按球心还原（不是顶边）。
+        val restoreLeft = prefs.ballOnLeft
+        val yRatio = prefs.ballYRatio
+        ballOnLeft = restoreLeft
+
         val params = WindowManager.LayoutParams(
             size, size,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -329,8 +359,9 @@ class FloatBallService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = screen.x - size - dp(6)
-            y = screen.y / 3
+            x = if (restoreLeft) dp(4) else screen.x - size - dp(4)
+            y = (screen.y * yRatio - size / 2f).toInt()
+                .coerceIn(0, (screen.y - size).coerceAtLeast(0))
             alpha = prefs.ballAlpha
         }
 
@@ -463,6 +494,26 @@ class FloatBallService : Service() {
         p.x = if (ballOnLeft) dp(4) else screen.x - size - dp(4)
         p.y = p.y.coerceIn(0, (screen.y - size).coerceAtLeast(0))
         runCatching { wm.updateViewLayout(v, p) }
+        // ★ v1.3：松手就把位置记下来（靠哪边 + 纵向比例），下次启动照着还原
+        rememberBallPosition(p.y, screen.y, size)
+    }
+
+    /**
+     * 记住球停在哪儿。
+     *
+     * ⚠️ 存**比例**不存像素：换分辨率 / 转屏 / 换手机之后，绝对像素会跑到屏幕外，
+     *    比例永远落在同一个相对位置。
+     * ⚠️ 用球的**中心**算比例（不是顶边）—— 球的大小是可调的，
+     *    用户眼里的"位置"是球心，不是它的上沿。
+     */
+    private fun rememberBallPosition(y: Int, screenH: Int, size: Int) {
+        if (screenH <= 0) return
+        val centerY = y + size / 2f
+        val ratio = (centerY / screenH).coerceIn(0f, 1f)
+        runCatching {
+            prefs.ballOnLeft = ballOnLeft
+            prefs.ballYRatio = ratio
+        }
     }
 
     // ==================== 悬浮球自动隐身 ====================
@@ -555,17 +606,24 @@ class FloatBallService : Service() {
         capturing = true
         detachBallForShot()
 
+        // ★ v1.3：挂看门狗 —— 万一截图回调一直不来，球不能永远回不来
+        mainHandler.removeCallbacks(shotWatchdog)
+        mainHandler.postDelayed(shotWatchdog, SHOT_WATCHDOG_MS)
+
         mainHandler.postDelayed({
             val acc = ShotAccessibilityService.instance
             if (acc != null) {
                 acc.capture { bmp ->
                     mainHandler.post {
+                        mainHandler.removeCallbacks(shotWatchdog)
                         restoreBallAfterShot()
                         capturing = false
                         if (bmp == null) {
-                            // 失败：静默 + 提醒他去开权限（截图失败最常见的原因就是权限掉了）
+                            // 失败：提醒他去开权限（截图失败最常见的原因就是权限掉了）
                             Log.w(TAG, "单屏截图失败：${ShotAccessibilityService.describe(ShotAccessibilityService.lastError)}")
                             if (ShotAccessibilityService.lastError == 1) noteAccessibilityBroken()
+                            // ★ v1.3：失败要**看得见**（以前纯静默，用户完全懵）
+                            flashBallFail()
                         } else {
                             clearAccessibilityNotice()
                             deliver(bmp, "shot")
@@ -581,6 +639,7 @@ class FloatBallService : Service() {
                 if (ok && revived != null) {
                     revived.capture { bmp ->
                         mainHandler.post {
+                            mainHandler.removeCallbacks(shotWatchdog)
                             restoreBallAfterShot()
                             capturing = false
                             if (bmp != null) {
@@ -588,16 +647,19 @@ class FloatBallService : Service() {
                                 deliver(bmp, "shot")
                             } else {
                                 Log.w(TAG, "叫醒后截图仍失败")
+                                flashBallFail()
                             }
                         }
                     }
                 } else {
                     // 叫不醒 → 收尾 + 提醒（不再降级投屏：用户定案只走无障碍一条路）
                     mainHandler.post {
+                        mainHandler.removeCallbacks(shotWatchdog)
                         restoreBallAfterShot()
                         capturing = false
                         Log.w(TAG, "无障碍不可用，截图放弃")
                         noteAccessibilityBroken()
+                        flashBallFail()
                     }
                 }
             }
@@ -684,18 +746,20 @@ class FloatBallService : Service() {
 
                         is ScrollCapture.Result.Multi -> {
                             // 拼不成一张长图，但手上有 N 屏好图。
-                            // ★ 我们的目标是「把图送进目标 App」，不是给 AI 读 ——
-                            //   所以这里**只递第一屏**（用户要的是"这张图"，
-                            //   一次给 5 张图反而会把目标 App 的输入框塞爆，
-                            //   而且很多 App 的分享入口只收单张）。
+                            // ★ v1.3：改成**也进裁剪页**（只给第一屏）——
+                            //   用户反馈原话：「最终也没有被录上，所以也到不了裁剪那一步」。
+                            //   以前这里直接默默导出，用户完全不知道发生了什么。
+                            //   现在至少让他有个能操作的东西，并且页面会说明情况。
+                            //   「只递第一屏」的理由没变：我们的目标是送图给目标 App，
+                            //   一次给 5 张会把输入框塞爆，很多分享入口也只收单张。
                             val first = result.shots.firstOrNull { !it.isRecycled }
                             result.shots.drop(1).forEach { runCatching { if (!it.isRecycled) it.recycle() } }
                             if (first == null) {
                                 Log.w(TAG, "自动滚动：一屏都没抓到")
                                 return@post
                             }
-                            Log.w(TAG, "长图没拼成（${result.shots.size} 屏），先递第一屏")
-                            deliver(first, "long")
+                            Log.w(TAG, "长图没拼成（${result.shots.size} 屏），拿第一屏进裁剪页")
+                            openCropPage(first, partial = true)
                         }
 
                         is ScrollCapture.Result.Fail -> {
@@ -735,13 +799,16 @@ class FloatBallService : Service() {
      *
      * ⚠️ 裁剪页用 `NEW_TASK` 起：这是从 Service 里发起的，
      *    不加会因为「没有 Activity 栈」而抛异常。
+     *
+     * @param partial true = 长图没拼成，这只是其中一屏（页面会如实说明）
      */
-    private fun openCropPage(bitmap: Bitmap) {
+    private fun openCropPage(bitmap: Bitmap, partial: Boolean = false) {
         runCatching {
             CropBus.put(bitmap)
             startActivity(
                 Intent(this, CropActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(CropActivity.EXTRA_PARTIAL, partial)
             )
         }.onFailure {
             Log.w(TAG, "打不开裁剪页：${it.message}")
@@ -789,7 +856,11 @@ class FloatBallService : Service() {
                     //    但我们会退回「通用分享面板」——那反而更烦人（用户没要选，却弹了个选择框）。
                     //    所以先查：不可用就跳过分享，别弹选择框。
                     val ok = Exporter.shareToApp(this, bitmap, pkg, nameHint)
-                    if (!ok) Log.w(TAG, "分享没成功（目标可能已卸载）")
+                    if (!ok) {
+                        Log.w(TAG, "分享没成功（目标可能已卸载）")
+                        // ★ v1.3：不跳转是最让人懵的失败 —— 抖一下，让用户知道"这次没成"
+                        flashBallFail()
+                    }
                 }
             }
 
@@ -973,6 +1044,30 @@ class FloatBallService : Service() {
     private var accessibilityNoticeShown = false
 
     // ==================== 小工具 ====================
+
+    /**
+     * 失败了让球抖一下。
+     *
+     * ★ v1.3 新增。以前失败是**纯静默**的（只写日志），用户看到的现象是
+     *   「点一下球，球没了，然后什么也没发生」—— 完全分不清是
+     *   「截到了但没发出去」还是「压根没截到」。用户原话：
+     *   「我不知道他有没有被截图下来」。
+     *
+     * 抖一下是最轻量的可见反馈：不打断用户、不需要任何权限、不会误触别的东西。
+     * （不用 Toast：Android 11+ 后台弹 Toast 会被系统丢，Service 里发更不靠谱。）
+     */
+    private fun flashBallFail() {
+        val v = ballView ?: return
+        runCatching {
+            val d = resources.displayMetrics.density
+            val anim = android.animation.ObjectAnimator.ofFloat(
+                v, "translationX",
+                0f, -12f * d, 12f * d, -8f * d, 8f * d, 0f
+            )
+            anim.duration = 340
+            anim.start()
+        }
+    }
 
     private fun hint(msg: String) {
         runCatching { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }

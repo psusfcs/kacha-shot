@@ -43,6 +43,13 @@ class CropActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "KachaShot"
 
+        /**
+         * 长图没拼成、只拿一屏过来时带这个 extra（v1.3）。
+         * 带了就把底部提示换成「没拼成长图，这是第 1 屏」——
+         * 用户得知道发生了什么，不能让他对着一张图猜「怎么只有一屏」。
+         */
+        const val EXTRA_PARTIAL = "partial"
+
         /** 至少保留这么高（dp）—— 别让用户一不留神把图裁成一条线 */
         private const val MIN_KEEP_DP = 48
 
@@ -92,6 +99,11 @@ class CropActivity : AppCompatActivity() {
         }
         src = bitmap
         b.ivCrop.setImageBitmap(bitmap)
+
+        // 拼不成长图、只拿了一屏过来 → 如实告诉用户（别让他猜「怎么只有一屏」）
+        if (intent?.getBooleanExtra(EXTRA_PARTIAL, false) == true) {
+            b.tvCropHint.text = getString(R.string.crop_hint_partial)
+        }
 
         b.btnCropCancel.setOnClickListener { cancelAndFinish() }
         b.btnCropDone.setOnClickListener { doCropAndExport() }

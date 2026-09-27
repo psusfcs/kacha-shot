@@ -62,6 +62,27 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_BALL_AUTO_HIDE, true)
         set(v) = sp.edit().putBoolean(KEY_BALL_AUTO_HIDE, v).apply()
 
+    /**
+     * 悬浮球停在哪一边（true = 靠左）。
+     *
+     * ★ v1.3 新增：球的位置要**记住**。用户原话：
+     *   「我把它挪到哪个位置以后，他下次打开还是在我放的那个位置，
+     *     因为每次他都不按我说的放，那我每次都要找这个悬浮球，这是不对的」。
+     */
+    var ballOnLeft: Boolean
+        get() = sp.getBoolean(KEY_BALL_ON_LEFT, false)
+        set(v) = sp.edit().putBoolean(KEY_BALL_ON_LEFT, v).apply()
+
+    /**
+     * 悬浮球的纵向位置，**存比例不存像素**（0f~1f = 屏幕高度的百分之几）。
+     *
+     * ⚠️ 为什么必须用比例：绝对像素换个分辨率、转个屏、换个手机就跑出屏幕外了；
+     *    比例永远落在同一个相对位置。
+     */
+    var ballYRatio: Float
+        get() = sp.getFloat(KEY_BALL_Y_RATIO, DEFAULT_BALL_Y_RATIO).coerceIn(0f, 1f)
+        set(v) = sp.edit().putFloat(KEY_BALL_Y_RATIO, v.coerceIn(0f, 1f)).apply()
+
     /** 开机自动启动悬浮球 */
     var bootAutoStart: Boolean
         get() = sp.getBoolean(KEY_BOOT_AUTO_START, true)
@@ -190,6 +211,8 @@ class Prefs(context: Context) {
         private const val KEY_BALL_SIZE = "ball_size"
         private const val KEY_BALL_ALPHA = "ball_alpha"
         private const val KEY_BALL_AUTO_HIDE = "ball_auto_hide"
+        private const val KEY_BALL_ON_LEFT = "ball_on_left"
+        private const val KEY_BALL_Y_RATIO = "ball_y_ratio"
         private const val KEY_BOOT_AUTO_START = "boot_auto_start"
 
         private const val KEY_TARGETS = "targets_json"
@@ -210,5 +233,8 @@ class Prefs(context: Context) {
 
         /** 透明度下限：再低用户找不着球，会以为 App 坏了 */
         const val MIN_BALL_ALPHA = 0.2f
+
+        /** 球的初始纵向位置（屏幕高度的三分之一处）—— 从没记过位置时用这个 */
+        const val DEFAULT_BALL_Y_RATIO = 0.33f
     }
 }

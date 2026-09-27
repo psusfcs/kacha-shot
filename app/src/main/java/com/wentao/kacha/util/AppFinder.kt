@@ -2,6 +2,7 @@ package com.wentao.kacha.util
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.drawable.Drawable
@@ -47,6 +48,31 @@ object AppFinder {
     )
 
     /**
+     * 排序用的中间结构 —— 三个排序键提前算好，
+     * 免得在比较器里反复查包信息（比较器会被调用 O(n log n) 次）。
+     */
+    private data class Scored(
+        val item: AppItem,
+        val strict: Boolean,   // 声明了「image 通配」= 真·能收图
+        val system: Boolean,   // 系统应用
+        val label: String
+    )
+
+    /**
+     * 是不是系统应用。
+     *
+     * ★ 为什么要区分：用户点「添加应用」是要把图**发给谁** ——
+     *   聊天/社交类 App 才对。而系统组件（打印、蓝牙、朗读、用户反馈）
+     *   也会响应分享，混在最前面很干扰（v1.2 用户实测：列表里一屏全是这些）。
+     *   做法是**排到后面**而不是过滤掉 —— 万一有人真想用「保存到本地」呢。
+     */
+    private fun isSystemApp(pm: PackageManager, pkg: String): Boolean =
+        runCatching {
+            val ai = pm.getApplicationInfo(pkg, 0)
+            (ai.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0
+        }.getOrDefault(false)
+
+    /**
      * 列出手机上所有能收图片的 App，并按「最可能用得上」排序。
      *
      * 排序规则（越靠前越可能是用户要找的）：
@@ -82,12 +108,17 @@ object AppFinder {
                     ri.loadLabel(pm).toString().ifBlank { pkg }
                 }.getOrDefault(pkg)
                 val icon = runCatching { ri.loadIcon(pm) }.getOrNull()
-                Triple(AppItem(label, pkg, icon), isStrict, label)
+                Scored(AppItem(label, pkg, icon), isStrict, isSystemApp(pm, pkg), label)
             }
-            // 先按「能不能收图」降序（true 在前），再按名字升序
-            .sortedWith(compareByDescending<Triple<AppItem, Boolean, String>> { it.second }
-                .thenBy { it.third.lowercase() })
-            .map { it.first }
+            // 排序三段：① 第三方 App 优先（系统组件沉底）
+            //           ② 专收图片的优先（比只收通用分享的更可能用得上）
+            //           ③ 同档次内按名字升序
+            .sortedWith(
+                compareBy<Scored> { it.system }
+                    .thenByDescending { it.strict }
+                    .thenBy { it.label.lowercase() }
+            )
+            .map { it.item }
     }
 
     /** 问系统：能接住 SEND + 指定 mimeType 的都有谁 */
