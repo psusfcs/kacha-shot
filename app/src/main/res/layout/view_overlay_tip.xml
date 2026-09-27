@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================
+  ★ 自己画的浮层提示条（v1.4）
+
+  ── 为什么要自己画，不用 Toast ──
+    Android 11+ 起，**后台应用弹的 Toast 会被系统直接丢掉**（不报错、不显示）。
+    而我们的截图/分享全是在 Service 里跑的（就是后台）——
+    用 Toast 等于"什么都没提示"。
+    唯一可靠的通道是**自己画一个悬浮窗**：我们有 SYSTEM_ALERT_WINDOW 权限。
+
+  ── 用户为什么要看到这个 ──
+    他原话：「我不知道他有没有被截图下来」「最终也没有被录上」——
+    以前所有失败只写在日志里，用户完全蒙在鼓里。
+    现在把「抓到几屏 / 为什么没拼上 / 为什么没跳转」直接摆到他眼前。
+
+  ⚠️⚠️ 窗口必须加 FLAG_NOT_TOUCHABLE（在 FloatBallService 里设）：
+      提示条要是不吃触摸的，否则就成了 v1.2 那个「遮罩吃掉滑动手势」的翻版（陷阱 ㊷）。
+  ============================================================================
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_overlay_tip"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingLeft="18dp"
+    android:paddingTop="12dp"
+    android:paddingRight="18dp"
+    android:paddingBottom="12dp">
+
+    <TextView
+        android:id="@+id/tvTipText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:lineSpacingMultiplier="1.2"
+        android:maxWidth="300dp"
+        android:textColor="#FFFFFFFF"
+        android:textSize="14sp" />
+</LinearLayout>

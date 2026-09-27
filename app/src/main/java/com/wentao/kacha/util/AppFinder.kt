@@ -88,25 +88,31 @@ object AppFinder {
         val strict = querySenders(context, "image/*")
         val loose = querySenders(context, "*/*")
 
-        // 严格的优先，宽松的补充在后面；同名包名去重
-        val merged = LinkedHashMap<String, Pair<ResolveInfo, Boolean>>()
+        // ★★ 按包名**分组**，不是简单覆写 —— 这是「列表里没有微信」的真凶。
+        //
+        //   一个 App 往往有**好几个分享入口**：微信就有「微信」「朋友圈」「收藏」三个，
+        //   它们的包名都是 com.tencent.mm。v1.2 之前这里是 `merged[pkg] = ri`，
+        //   谁最后遍历到谁就把前面的顶掉 —— 结果用户看到的是「朋友圈」，
+        //   而**真正想找的「微信」压根没出现**。
+        //   （用户原话：「连朋友圈都有为什么没有微信」——一句话定位到这儿。）
+        //
+        //   现在每个包先把所有入口收齐，再挑一个最能代表这个 App 的（见 pickMainEntry）。
+        val byPkg = LinkedHashMap<String, MutableList<Pair<ResolveInfo, Boolean>>>()
         strict.forEach { ri ->
             val pkg = ri.activityInfo?.packageName ?: return@forEach
-            merged[pkg] = ri to true
+            byPkg.getOrPut(pkg) { mutableListOf() }.add(ri to true)
         }
         loose.forEach { ri ->
             val pkg = ri.activityInfo?.packageName ?: return@forEach
-            if (!merged.containsKey(pkg)) merged[pkg] = ri to false
+            // 已经有严格匹配入口的包就不再加宽松的了（同一入口别重复收）
+            if (byPkg[pkg] == null) byPkg[pkg] = mutableListOf(ri to false)
         }
 
         val self = context.packageName
-        return merged.entries
+        return byPkg.entries
             .filter { (pkg, _) -> pkg != self && pkg !in exclude }
-            .mapNotNull { (pkg, pair) ->
-                val (ri, isStrict) = pair
-                val label = runCatching {
-                    ri.loadLabel(pm).toString().ifBlank { pkg }
-                }.getOrDefault(pkg)
+            .mapNotNull { (pkg, entries) ->
+                val (ri, isStrict, label) = pickMainEntry(pm, pkg, entries)
                 val icon = runCatching { ri.loadIcon(pm) }.getOrNull()
                 Scored(AppItem(label, pkg, icon), isStrict, isSystemApp(pm, pkg), label)
             }
@@ -119,6 +125,55 @@ object AppFinder {
                     .thenBy { it.label.lowercase() }
             )
             .map { it.item }
+    }
+
+    /**
+     * 一个 App 可能有好几个分享入口，挑出**最能代表它的那一个**。
+     *
+     * ★★ 为什么必须挑（而不是随便取一个）：微信的三个入口分别叫
+     *    「微信」「朋友圈」「收藏」。用户要"发给微信"，
+     *    那就必须把入口名叫「微信」的那个挑出来 —— 挑到「朋友圈」等于功能废了。
+     *
+     * 打分规则（越高越优先）：
+     *   ① 入口名 **等于**应用名 → 这就是主入口（微信的聊天分享入口正好叫「微信」）
+     *   ② 入口名 **包含**应用名（如「微信收藏」）→ 次优
+     *   ③ 其余：**名字越短越可能更通用**（"朋友圈"比"朋友圈收藏"更像主入口）
+     *   ④ 同分时优先「严格收图片」的那个
+     *
+     * @return Triple(入口信息, 是否严格收图片, 显示名)
+     */
+    private fun pickMainEntry(
+        pm: PackageManager,
+        pkg: String,
+        entries: List<Pair<ResolveInfo, Boolean>>
+    ): Triple<ResolveInfo, Boolean, String> {
+        val appLabel = runCatching {
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+        }.getOrDefault("")
+
+        var bestRi = entries[0].first
+        var bestStrict = entries[0].second
+        var bestLabel = runCatching { bestRi.loadLabel(pm).toString() }.getOrDefault(pkg)
+        var bestScore = Int.MIN_VALUE
+
+        for ((ri, strict) in entries) {
+            val lbl = runCatching {
+                ri.loadLabel(pm).toString().ifBlank { pkg }
+            }.getOrDefault(pkg)
+            val base = when {
+                appLabel.isNotBlank() && lbl.equals(appLabel, ignoreCase = true) -> 100_000
+                appLabel.isNotBlank() && lbl.contains(appLabel) -> 50_000
+                else -> 10_000 - lbl.length
+            }
+            val score = base + if (strict) 1 else 0
+            if (score > bestScore) {
+                bestScore = score
+                bestRi = ri
+                bestStrict = strict
+                bestLabel = lbl
+            }
+        }
+        return Triple(bestRi, bestStrict, bestLabel)
     }
 
     /** 问系统：能接住 SEND + 指定 mimeType 的都有谁 */

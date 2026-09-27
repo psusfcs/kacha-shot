@@ -81,6 +81,7 @@ class MainActivity : AppCompatActivity() {
         setupStatusSection()
         setupTargetSection()
         setupSwitchSection()
+        setupJumpHelp()
         setupVersion()
 
         // Android 13+ 首次进来顺手问一下通知权限
@@ -435,6 +436,68 @@ class MainActivity : AppCompatActivity() {
             BuildConfig.VERSION_NAME,
             BuildConfig.VERSION_CODE
         )
+    }
+
+    // ==================== 小米「后台弹出界面」自助入口 ====================
+
+    /**
+     * 小米系手机才显示「跳转不了？」这个入口。
+     *
+     * ── 为什么需要它 ──
+     *   小米（MIUI / HyperOS）有一个**「后台弹出界面」**权限，**默认是禁止的**。
+     *   被禁之后，从后台服务启动 Activity 会被系统**静默拦截** ——
+     *   不抛异常、不打日志、也不跳转。用户看到的现象就是
+     *   「图存进相册了，但怎么都不跳转」（用户实测反馈过一模一样的症状）。
+     *
+     *   这个权限**没法用代码申请**（它不在 Android 标准权限体系里，
+     *   是小米自己加的管控），只能引导用户去系统权限页手动开 ——
+     *   所以这里给一个一键直达的入口。
+     */
+    private fun setupJumpHelp() {
+        if (!isMiui()) return          // 不是小米系就不显示这一行
+        b.btnJumpHelp.visibility = View.VISIBLE
+        b.btnJumpHelp.setOnClickListener {
+            if (!openMiuiPermEditor()) {
+                toast("没找到权限页，去「设置 → 应用管理 → 咔嚓截屏」里找「后台弹出界面」")
+            }
+        }
+    }
+
+    /**
+     * 是不是小米系（MIUI / HyperOS）。
+     *
+     * ⚠️ `android.os.SystemProperties` 不是公开 API（SDK 里没这个类），
+     *    只能反射读。所以必须包 runCatching —— 读不到就当"不是"
+     *    （宁可少显示一行，也不能让首页崩）。
+     */
+    private fun isMiui(): Boolean = runCatching {
+        val cls = Class.forName("android.os.SystemProperties")
+        val get = cls.getMethod("get", String::class.java)
+        val v = get.invoke(null, "ro.miui.ui.version.name") as? String
+        !v.isNullOrBlank()
+    }.getOrDefault(false)
+
+    /**
+     * 打开小米的「应用权限编辑」页。
+     * 两个类名对应不同 MIUI 版本，都试一遍（都失败就返回 false 让调用方给文字引导）。
+     */
+    private fun openMiuiPermEditor(): Boolean {
+        val classNames = listOf(
+            "com.miui.permcenter.permissions.PermissionsEditorActivity",
+            "com.miui.permcenter.permissions.AppPermissionsEditorActivity"
+        )
+        for (cn in classNames) {
+            val ok = runCatching {
+                startActivity(
+                    Intent("miui.intent.action.APP_PERM_EDITOR")
+                        .setClassName("com.miui.securitycenter", cn)
+                        .putExtra("extra_pkgname", packageName)
+                )
+                true
+            }.getOrDefault(false)
+            if (ok) return true
+        }
+        return false
     }
 
     // ==================== 小工具 ====================

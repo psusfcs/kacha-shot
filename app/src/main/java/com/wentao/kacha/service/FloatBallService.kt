@@ -225,6 +225,7 @@ class FloatBallService : Service() {
         if (current === this) current = null
         scrollCancelled = true
         runCatching { hideScrollGuard() }
+        runCatching { hideOverlayTip() }
         runCatching { ballView?.let { wm.removeView(it) } }
         ballView = null
         ballParams = null
@@ -620,10 +621,13 @@ class FloatBallService : Service() {
                         capturing = false
                         if (bmp == null) {
                             // 失败：提醒他去开权限（截图失败最常见的原因就是权限掉了）
-                            Log.w(TAG, "单屏截图失败：${ShotAccessibilityService.describe(ShotAccessibilityService.lastError)}")
+                            val why = ShotAccessibilityService.describe(ShotAccessibilityService.lastError)
+                            Log.w(TAG, "单屏截图失败：$why")
                             if (ShotAccessibilityService.lastError == 1) noteAccessibilityBroken()
                             // ★ v1.3：失败要**看得见**（以前纯静默，用户完全懵）
                             flashBallFail()
+                            // ★ v1.4：连原因一起摆出来
+                            showOverlayTip("截图没成：$why")
                         } else {
                             clearAccessibilityNotice()
                             deliver(bmp, "shot")
@@ -759,17 +763,20 @@ class FloatBallService : Service() {
                                 return@post
                             }
                             Log.w(TAG, "长图没拼成（${result.shots.size} 屏），拿第一屏进裁剪页")
+                            showOverlayTip("长图没拼上（抓到 ${result.shots.size} 屏），拿了第一屏给你裁")
                             openCropPage(first, partial = true)
                         }
 
                         is ScrollCapture.Result.Fail -> {
                             val partial = result.partial
                             if (partial != null && !partial.isRecycled) {
-                                // 只抓到 1 屏 / 拼不上但有部分 → 给它这一屏
                                 Log.w(TAG, "自动滚动：整张没拼成，先给第一屏")
+                                showOverlayTip("长图没拼成，先给你这一屏")
                                 deliver(partial, "long")
                             } else {
                                 Log.w(TAG, "自动滚动失败：${result.reason}")
+                                // ★ v1.4：失败原因要**看得见**（以前只写日志，用户完全懵）
+                                showOverlayTip("长截图没成：${result.reason}")
                             }
                         }
                     }
@@ -849,6 +856,7 @@ class FloatBallService : Service() {
                 val pkg = prefs.defaultTargetPkg
                 if (pkg.isBlank()) {
                     hint(getString(R.string.tip_no_target))
+                    showOverlayTip(getString(R.string.tip_no_target))
                 } else {
                     // ⚠️ 为什么重新查一遍「包还在不在」：
                     //    用户可能早就把那个 App 卸载了，设置里留着个死包名。
@@ -860,6 +868,10 @@ class FloatBallService : Service() {
                         Log.w(TAG, "分享没成功（目标可能已卸载）")
                         // ★ v1.3：不跳转是最让人懵的失败 —— 抖一下，让用户知道"这次没成"
                         flashBallFail()
+                        // ★ v1.4：把原因说清楚。用户实测「存到相册了但没跳转」——
+                        //   最常见的原因是小米的「后台弹出界面」权限默认禁止：
+                        //   从后台服务启动 Activity 会被**静默拦截**（不报错、也不跳转）。
+                        showOverlayTip("没跳转成功（图已存相册）。多半是缺「后台弹出界面」权限")
                     }
                 }
             }
@@ -1042,6 +1054,62 @@ class FloatBallService : Service() {
 
     @Volatile
     private var accessibilityNoticeShown = false
+
+    // ==================== 浮层提示（自己画的 Toast）====================
+
+    /**
+     * 提示条的 view / 参数。
+     * 复用同一个 view，避免每次提示都 inflate 一遍（截图流程里会连着提示好几次）。
+     */
+    private var tipView: View? = null
+    private var tipParams: WindowManager.LayoutParams? = null
+    private val hideTipRunnable = Runnable { hideOverlayTip() }
+
+    /**
+     * 在屏幕上浮一条小提示，2.8 秒后自己消失。
+     *
+     * ★★ v1.4 新增。用户反复说「我不知道他有没有被截图下来」「最终也没有被录上」——
+     *    以前所有失败**只写日志**，用户完全蒙在鼓里。而 Toast 在后台会被系统丢掉
+     *    （Android 11+ 限制），所以只能**自己画**：我们有悬浮窗权限，够用。
+     *
+     * ⚠️⚠️ 窗口必须带 `FLAG_NOT_TOUCHABLE` —— 提示条绝不能吃触摸，
+     *    否则就是 v1.2 那个「遮罩吃掉滑动手势」的翻版（陷阱 ㊷）。
+     * ⚠️ 走 `mainHandler.post`：这个方法可能从后台线程被调（长截图流程在那头）。
+     */
+    private fun showOverlayTip(text: String) {
+        if (text.isBlank()) return
+        mainHandler.post {
+            runCatching {
+                val v = tipView ?: LayoutInflater.from(this)
+                    .inflate(R.layout.view_overlay_tip, null)
+                    .also { tipView = it }
+                v.findViewById<android.widget.TextView>(R.id.tvTipText)?.text = text
+                if (v.parent == null) {
+                    val p = WindowManager.LayoutParams(
+                        WindowManager.LayoutParams.WRAP_CONTENT,
+                        WindowManager.LayoutParams.WRAP_CONTENT,
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                        // ★ 不吃触摸 —— 提示绝对不能挡住用户的操作
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                        PixelFormat.TRANSLUCENT
+                    ).apply {
+                        gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                        y = dp(132)
+                    }
+                    tipParams = p
+                    wm.addView(v, p)
+                }
+                mainHandler.removeCallbacks(hideTipRunnable)
+                mainHandler.postDelayed(hideTipRunnable, 2800)
+            }
+        }
+    }
+
+    private fun hideOverlayTip() {
+        val v = tipView ?: return
+        runCatching { if (v.parent != null) wm.removeViewImmediate(v) }
+    }
 
     // ==================== 小工具 ====================
 
