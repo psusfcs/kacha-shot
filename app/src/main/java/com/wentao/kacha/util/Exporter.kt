@@ -1,5 +1,8 @@
 package com.wentao.kacha.util
 
+import android.app.AppOpsManager
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
@@ -28,8 +31,11 @@ import java.io.FileOutputStream
  *     · 剪贴板   = 备用。部分 App 支持粘贴图片。
  *
  * ── ⚠️ 三条路的已知限制（都不是 bug）──
- *   · 分享跳转**只能新开对话**，接不上用户正在聊的那条 —— 安卓分享机制
- *     不知道目标 App 内部有哪几个会话，这是系统层面的限制。
+ *   · 安卓分享机制不知道目标 App 内部有哪几个会话 —— 图永远到不了「正在聊的
+ *     那条会话」手里，这是系统层面的限制。
+ *   · ★ v2.1 起跳转分三路（见 FloatBallService.deliver 的分支）：
+ *     目标就在眼前 → 不跳；后台还开着 → 原样切回它的窗口（bringToFront）；
+ *     没开 → 走分享冷启动新窗口，图直接进输入框。
  *   · 剪贴板里的图片，很多 App（豆包、微信）**不认**，粘不出来。
  *     留着是因为"万一能用"，用户说用不上随时可以删。
  *   · 每截一次相册就多一张图，会越攒越多（用户已确认接受，自己统一删）。
@@ -150,6 +156,95 @@ object Exporter {
                 }.onFailure { Log.w(TAG, "通用分享也失败：${it.message}") }
             }
         }.isSuccess
+    }
+
+    // ==================== ★ v2.1 跳转窗口复用 ====================
+
+    /**
+     * 「后台还开着」的判定窗口：最近这么长时间内到过前台，就当它还开着。
+     *
+     * ★ 为什么取 12 小时：用户的使用习惯是「一堆常用 App 长期挂在后台」，
+     *   取短了会把还挂着的 App 误判成「没开」→ 白白新开一个会话（用户最烦这个）。
+     *   误判成「开着」的代价很小 —— 顶多是冷启动到它的首页，用户自己点进会话加图。
+     *   所以宁可取长。
+     */
+    const val RECENT_ALIVE_MS = 12L * 60L * 60L * 1000L
+
+    /**
+     * 用户有没有开「使用情况访问权」。
+     *
+     * ★ 为什么需要这个权限：Android 8.0 起 getRunningAppProcesses 对普通应用
+     *   只返回**自己的进程**（别的 App 死活一概看不见），官方唯一合规的路子是
+     *   UsageStatsManager，而它要求这条特殊权限 —— 只能在系统设置里手动开。
+     */
+    fun hasUsageAccess(context: Context): Boolean {
+        return runCatching {
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                android.os.Process.myUid(),
+                context.packageName
+            ) == AppOpsManager.MODE_ALLOWED
+        }.onFailure { Log.w(TAG, "查使用情况权限失败：${it.message}") }
+            .getOrDefault(false)
+    }
+
+    /**
+     * 目标 App 最近有没有到过前台（近似「后台还开着」）。
+     *
+     * ★ 为什么用「最近到过前台」而不是「现在还活着」：系统不给普通应用看
+     *   别的 App 的死活，只能拿使用记录近似 —— 最近刚用过的 App，多半还挂在
+     *   后台（跟用户「我都在后台挂着呢」的直觉一致）。
+     *
+     * @return true = 判定为「还开着」；没授权 / 查不到一律 false（调用方走老路分享）
+     */
+    fun wasRecentlyOpen(
+        context: Context,
+        pkg: String,
+        lookbackMs: Long = RECENT_ALIVE_MS
+    ): Boolean {
+        if (pkg.isBlank()) return false
+        if (!hasUsageAccess(context)) return false
+        return runCatching {
+            val usm = context.getSystemService(UsageStatsManager::class.java)
+                ?: return@runCatching false
+            val end = System.currentTimeMillis()
+            val start = end - lookbackMs
+            val events = usm.queryEvents(start, end)
+            var lastOpen = 0L
+            val e = UsageEvents.Event()
+            while (events.hasNextEvent()) {
+                events.getNextEvent(e)
+                // MOVE_TO_FOREGROUND 就是「到前台来了」（API 29 起改叫 ACTIVITY_RESUMED，
+                // 常量值相同，老名字在全部支持版本上都能用）
+                if (e.packageName == pkg && e.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                    if (e.timeStamp > lastOpen) lastOpen = e.timeStamp
+                }
+            }
+            lastOpen >= start
+        }.onFailure { Log.w(TAG, "查使用记录失败：${it.message}") }.getOrDefault(false)
+    }
+
+    /**
+     * 把目标 App 现有的窗口**原样**切回前台 —— 等价于用户从桌面点它的图标。
+     *
+     * ★ 为什么这样就「不新开会话」：这里发的是普通的启动意图（打开 App 本体），
+     *   不是分享意图。系统按任务栈找它已有的窗口，找到了就原样带到前台，
+     *   用户上次停在哪个界面就回到哪个界面。而 shareToApp 走 ACTION_SEND，
+     *   目标 App 一看是分享来的，就自己开个新会话 —— 这正是 v2.1 要改掉的。
+     *
+     * @return true = 已发出切换；没有桌面入口 / 被系统拦截 → false（调用方走老路）
+     */
+    fun bringToFront(context: Context, pkg: String): Boolean {
+        return runCatching {
+            val launch = context.packageManager.getLaunchIntentForPackage(pkg)
+                ?: return@runCatching false
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(launch)
+            Log.i(TAG, "已把 $pkg 的现有窗口切回前台")
+            true
+        }.onFailure { Log.w(TAG, "切回 ${pkg} 前台失败：${it.message}") }
+            .getOrDefault(false)
     }
 
     /**

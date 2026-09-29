@@ -111,6 +111,12 @@
     <string name="status_jump_blocked">被系统拦截，截图后跳不过去</string>
     <string name="btn_jump_fix">去开</string>
 
+    <!-- ==================== 状态区：使用情况访问权（v2.1）==================== -->
+    <string name="status_usage">使用情况访问权</string>
+    <string name="status_usage_on">已开启，后台开着的目标能切回原窗口</string>
+    <string name="status_usage_off">没开，后台跳转只能新开窗口</string>
+    <string name="btn_usage_fix">去开</string>
+
     <!-- 「发给谁」列表折叠开关（v1.6）—— 展开文案里的 %1$d 是已加数量 -->
     <string name="targets_toggle_expand">展开（已加 %1$d 个）▾</string>
     <string name="targets_toggle_collapse">收起 ▴</string>

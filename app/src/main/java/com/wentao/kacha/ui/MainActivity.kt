@@ -31,6 +31,7 @@ import com.wentao.kacha.databinding.ItemTargetAppBinding
 import com.wentao.kacha.service.FloatBallService
 import com.wentao.kacha.service.ShotAccessibilityService
 import com.wentao.kacha.util.AppFinder
+import com.wentao.kacha.util.Exporter
 import com.wentao.kacha.util.Prefs
 
 /**
@@ -178,6 +179,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 使用情况访问权（v2.1）：判断「目标 App 后台还开着吗」的开关。
+        // 开了它，后台跳转才能切回原窗口；没开就走老路（新窗口分享），不影响主流程。
+        b.btnUsageFix.setOnClickListener { openUsageAccessSettings() }
+
         // 启动 / 关闭悬浮球
         b.btnBallToggle.setOnClickListener {
             if (!Settings.canDrawOverlays(this)) {
@@ -244,6 +249,16 @@ class MainActivity : AppCompatActivity() {
         } else {
             b.rowJumpState.visibility = View.GONE
         }
+
+        // 使用情况访问权（v2.1）：所有 ROM 都有（原生 AOSP 权限）。
+        // 判据直接问 AppOps —— 这是用户能自己控制的开关，照实显示。
+        val usageOk = Exporter.hasUsageAccess(this)
+        b.rowUsageState.visibility = View.VISIBLE
+        b.ivUsageState.setImageResource(if (usageOk) R.drawable.ic_check else R.drawable.ic_warn)
+        b.tvUsageState.text = getString(
+            if (usageOk) R.string.status_usage_on else R.string.status_usage_off
+        )
+        b.btnUsageFix.visibility = if (usageOk) View.GONE else View.VISIBLE
     }
 
     private fun openOverlaySettings() {
@@ -553,6 +568,24 @@ class MainActivity : AppCompatActivity() {
             if (ok) return true
         }
         return false
+    }
+
+    /**
+     * 跳到系统的「使用情况访问权」设置页（v2.1）。
+     *
+     * ★ 为什么需要：Android 8.0 起 getRunningAppProcesses 只能看到自己的进程，
+     *   判断「目标 App 后台还开着吗」官方唯一合规路子是 UsageStatsManager，
+     *   而它要求这个特殊权限 —— 没法弹框申请，只能引导用户来这里手动开。
+     */
+    private fun openUsageAccessSettings() {
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.onFailure {
+            toast("没找到设置页，去「设置 → 应用管理 → 咔嚓截屏」里找「使用情况访问权」")
+        }
     }
 
     // ==================== 小工具 ====================

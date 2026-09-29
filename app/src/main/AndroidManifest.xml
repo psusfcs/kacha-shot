@@ -34,6 +34,17 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!--
+      使用情况访问权（v2.1）：判断「目标 App 后台还开着吗」——
+      Android 8.0 起 getRunningAppProcesses 对普通应用只返回自己的进程，
+      官方唯一合规路子是 UsageStatsManager，而它要求这条 protected 权限
+      （用户在系统设置里手动授予，首页状态行有一键跳转）。
+      没授权时自动退回「直接分享」的老行为，不影响主流程。
+    -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!--
       ★ 快捷方式自愈（HyperOS 常用）：升级后图标可能变灰/消失，声明这条让系统重建。
       ★ 这条同时也是「能查到其他 App」的前提 —— Android 11+ 的包可见性机制要求：
         不在这里声明，queryIntentActivities 就**查不到**别的 App。

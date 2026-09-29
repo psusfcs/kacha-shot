@@ -291,6 +291,58 @@
                     android:text="@string/btn_jump_fix"
                     style="@style/KachaChip" />
             </LinearLayout>
+
+            <!--
+              「使用情况访问权」行（v2.1）：
+              判断「目标 App 后台还开着吗」的依据 —— 开了它，截图时才能把
+              后台挂着的目标 App 原样切回前台（而不是新开一个会话）。
+              特殊权限没法弹框申请，只能引导用户去系统设置手动开。
+            -->
+            <LinearLayout
+                android:id="@+id/rowUsageState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <ImageView
+                    android:id="@+id/ivUsageState"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:contentDescription="@string/status_usage"
+                    android:src="@drawable/ic_check" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="11dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/status_usage"
+                        style="@style/KachaRowTitle" />
+
+                    <TextView
+                        android:id="@+id/tvUsageState"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/status_usage_off"
+                        style="@style/KachaRowSub" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/btnUsageFix"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_usage_fix"
+                    style="@style/KachaChip" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- ==================== 3. 目标 App 卡片 ==================== -->

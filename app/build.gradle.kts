@@ -20,8 +20,8 @@ android {
         applicationId = "com.wentao.kacha"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "2.0"
+        versionCode = 12
+        versionName = "2.1"
         // 只有一个界面，不需要多语言资源
         resourceConfigurations += listOf("zh", "en")
     }

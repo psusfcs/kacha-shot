@@ -874,20 +874,32 @@ class FloatBallService : Service() {
                     flashBallFail()
                     showOverlayTip("「$pkg」现在收不了图了，去首页重新选一个")
                 } else {
-                    // ⚠️ 为什么重新查一遍「包还在不在」：
-                    //    用户可能早就把那个 App 卸载了，设置里留着个死包名。
-                    //    直接 startActivity 会走 ActivityNotFoundException（被 runCatching 兜住），
-                    //    但我们会退回「通用分享面板」——那反而更烦人（用户没要选，却弹了个选择框）。
-                    //    所以先查：不可用就跳过分享，别弹选择框。
-                    val ok = Exporter.shareToApp(this, bitmap, pkg, nameHint)
-                    if (!ok) {
-                        Log.w(TAG, "分享没成功（目标可能已卸载）")
-                        // ★ v1.3：不跳转是最让人懵的失败 —— 抖一下，让用户知道"这次没成"
-                        flashBallFail()
-                        // ★ v1.4：把原因说清楚。用户实测「存到相册了但没跳转」——
-                        //   最常见的原因是小米的「后台弹出界面」权限默认禁止：
-                        //   从后台服务启动 Activity 会被**静默拦截**（不报错、也不跳转）。
-                        showOverlayTip("没跳转成功（图已存相册）。多半是缺「后台弹出界面」权限")
+                    // ★★ v2.1 跳转分三路（用户定案：开着就回原窗口，没开才新开）——
+                    //   ① 目标就在眼前（用户正用着它）→ 哪儿都不用跳，
+                    //      图已经在相册/剪贴板，用户自己粘或从相册加；
+                    //   ② 目标后台还开着 → 把它现有的窗口原样切回前台（等价点桌面图标）。
+                    //      **不走分享** —— 分享会让目标 App 自己开个新会话（没上下文，用户烦透了）；
+                    //   ③ 没开着（或没授权判不了）→ 照旧走分享：冷启动新窗口，图直接进输入框。
+                    when {
+                        pkg == ShotAccessibilityService.lastForegroundPackage ->
+                            Log.i(TAG, "目标 $pkg 就在前台，不跳转不打扰")
+
+                        Exporter.wasRecentlyOpen(this, pkg) &&
+                            Exporter.bringToFront(this, pkg) ->
+                            Log.i(TAG, "$pkg 后台开着 → 已切回原窗口")
+
+                        else -> {
+                            val ok = Exporter.shareToApp(this, bitmap, pkg, nameHint)
+                            if (!ok) {
+                                Log.w(TAG, "分享没成功（目标可能已卸载）")
+                                // ★ v1.3：不跳转是最让人懵的失败 —— 抖一下，让用户知道"这次没成"
+                                flashBallFail()
+                                // ★ v1.4：把原因说清楚。用户实测「存到相册了但没跳转」——
+                                //   最常见的原因是小米的「后台弹出界面」权限默认禁止：
+                                //   从后台服务启动 Activity 会被**静默拦截**（不报错、也不跳转）。
+                                showOverlayTip("没跳转成功（图已存相册）。多半是缺「后台弹出界面」权限")
+                            }
+                        }
                     }
                 }
             }
